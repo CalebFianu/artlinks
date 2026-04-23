@@ -549,3 +549,123 @@ class CollectionViewSetTests(APITestCase):
         self._auth(self.owner)
         response = self.client.delete(self._detail_url(self.other_private.pk))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+# ---------------------------------------------------------------------------
+# CollectionViewSet — add_link action
+# ---------------------------------------------------------------------------
+
+class CollectionAddLinkTests(APITestCase):
+    """
+    POST /api/collections/{id}/add_link/
+
+    Admin       → can add any link to any collection.
+    Owner       → can add their own links to their own collections.
+    Owner       → cannot add another user's link (403).
+    Non-owner   → cannot add a link to a public collection they don't own (403).
+    Non-owner   → cannot add a link to a private collection they don't own (404).
+    Unauthenticated → blocked (401).
+    Missing link_id  → 400.
+    Non-existent link_id → 404.
+    Duplicate add    → idempotent, still 200.
+    """
+
+    def setUp(self):
+        self.admin = AppUser.objects.create_user(
+            username='admin', password='pass123', role=AppUser.Role.ADMIN,
+        )
+        self.owner = AppUser.objects.create_user(
+            username='owner', password='pass123', role=AppUser.Role.CREATOR,
+        )
+        self.other = AppUser.objects.create_user(
+            username='other', password='pass123', role=AppUser.Role.CREATOR,
+        )
+
+        self.owner_link = make_link(self.owner)
+        self.other_link = make_link(self.other, url='https://other.com')
+
+        self.owner_public = make_collection(self.owner, name='Owner Public', category=Collection.Category.PUBLIC)
+        self.owner_private = make_collection(self.owner, name='Owner Private', category=Collection.Category.PRIVATE)
+        self.other_public = make_collection(self.other, name='Other Public', category=Collection.Category.PUBLIC)
+        self.other_private = make_collection(self.other, name='Other Private', category=Collection.Category.PRIVATE)
+
+    def _auth(self, user):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(user)}')
+
+    def _url(self, pk):
+        return reverse('collection-add-link', args=[pk])
+
+    # --- success ---
+
+    def test_owner_can_add_own_link_to_own_collection(self):
+        self._auth(self.owner)
+        response = self.client.post(self._url(self.owner_public.pk), {'link_id': self.owner_link.pk})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(self.owner_link.pk, response.data['links'])
+
+    def test_link_is_persisted_in_database(self):
+        self._auth(self.owner)
+        self.client.post(self._url(self.owner_public.pk), {'link_id': self.owner_link.pk})
+        self.assertIn(self.owner_link, self.owner_public.links.all())
+
+    def test_admin_can_add_any_link_to_any_collection(self):
+        self._auth(self.admin)
+        response = self.client.post(self._url(self.other_private.pk), {'link_id': self.owner_link.pk})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(self.owner_link.pk, response.data['links'])
+
+    def test_owner_can_add_link_to_own_private_collection(self):
+        self._auth(self.owner)
+        response = self.client.post(self._url(self.owner_private.pk), {'link_id': self.owner_link.pk})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(self.owner_link.pk, response.data['links'])
+
+    def test_adding_link_already_in_collection_is_idempotent(self):
+        self.owner_public.links.add(self.owner_link)
+        self._auth(self.owner)
+        response = self.client.post(self._url(self.owner_public.pk), {'link_id': self.owner_link.pk})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.owner_public.links.filter(pk=self.owner_link.pk).count(), 1)
+
+    # --- bad request ---
+
+    def test_missing_link_id_returns_400(self):
+        self._auth(self.owner)
+        response = self.client.post(self._url(self.owner_public.pk), {})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_nonexistent_link_id_returns_404(self):
+        self._auth(self.owner)
+        response = self.client.post(self._url(self.owner_public.pk), {'link_id': 99999})
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    # --- permission: wrong link owner ---
+
+    def test_owner_cannot_add_other_users_link(self):
+        self._auth(self.owner)
+        response = self.client.post(self._url(self.owner_public.pk), {'link_id': self.other_link.pk})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_other_users_link_not_added_after_403(self):
+        self._auth(self.owner)
+        self.client.post(self._url(self.owner_public.pk), {'link_id': self.other_link.pk})
+        self.assertNotIn(self.other_link, self.owner_public.links.all())
+
+    # --- permission: wrong collection owner ---
+
+    def test_non_owner_cannot_add_link_to_others_public_collection(self):
+        self._auth(self.owner)
+        response = self.client.post(self._url(self.other_public.pk), {'link_id': self.owner_link.pk})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_non_owner_cannot_add_link_to_others_private_collection(self):
+        # get_queryset() excludes other users' private collections, so they resolve to 404
+        self._auth(self.owner)
+        response = self.client.post(self._url(self.other_private.pk), {'link_id': self.owner_link.pk})
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    # --- unauthenticated ---
+
+    def test_unauthenticated_cannot_add_link(self):
+        response = self.client.post(self._url(self.owner_public.pk), {'link_id': self.owner_link.pk})
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
