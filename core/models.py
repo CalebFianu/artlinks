@@ -9,6 +9,11 @@ class AppUser(AbstractUser):
         GUEST = 'guest', 'Guest'
 
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.GUEST)
+    profile_picture = models.URLField(blank=True, null=True)
+
+    @property
+    def is_admin(self):
+        return self.is_superuser or self.role == self.Role.ADMIN
 
     def __str__(self):
         return self.username
@@ -20,7 +25,7 @@ class Link(models.Model):
         REGULAR = 'regular', 'Regular'
 
     url = models.URLField()
-    image = models.URLField(blank=True, null=True)
+    title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     link_day = models.DateTimeField()
     category = models.CharField(max_length=10, choices=Category.choices, default=Category.REGULAR)

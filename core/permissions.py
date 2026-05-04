@@ -3,6 +3,23 @@ from rest_framework.permissions import BasePermission, SAFE_METHODS
 from .models import AppUser, Collection
 
 
+class UserScopedReadPermission(BasePermission):
+    """
+    For read-only user-scoped actions resolved by ?username=.
+    - Unauthenticated → 401
+    - Admin → always allowed
+    - Non-admin → only if ?username matches request.user.username
+    """
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_admin:
+            return True
+        requested = request.query_params.get('username')
+        return requested == request.user.username
+
+
 class AppUserPermission(BasePermission):
     """
     - Admin:          full access to all user records.
@@ -14,11 +31,11 @@ class AppUserPermission(BasePermission):
         if not request.user.is_authenticated:
             return False
         if view.action in ('list', 'create'):
-            return request.user.role == AppUser.Role.ADMIN
+            return request.user.is_admin
         return True
 
     def has_object_permission(self, request, view, obj):
-        if request.user.role == AppUser.Role.ADMIN:
+        if request.user.is_admin:
             return True
         return obj == request.user
 
@@ -33,7 +50,7 @@ class LinkPermission(BasePermission):
         return request.user.is_authenticated
 
     def has_object_permission(self, request, view, obj):
-        if request.user.role == AppUser.Role.ADMIN:
+        if request.user.is_admin:
             return True
         return obj.user == request.user
 
@@ -51,7 +68,7 @@ class CollectionPermission(BasePermission):
 
     def has_object_permission(self, request, view, obj):
         user = request.user
-        if user.role == AppUser.Role.ADMIN:
+        if user.is_admin:
             return True
         if obj.user == user:
             return True
