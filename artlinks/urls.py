@@ -19,11 +19,25 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from core.views import RegisterView, SocialAuthView, SocialCompleteView, UsernameCheckView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('core.urls')),
+
+    # Auth — credentials
     path('api/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/register/', RegisterView.as_view(), name='register'),
+
+    # Auth — social (Google, Microsoft)
+    path('api/auth/social/<str:provider>/', SocialAuthView.as_view(), name='social_auth'),
+    path('api/auth/social/complete/', SocialCompleteView.as_view(), name='social_complete'),
+
+    # Helpers
+    path('api/auth/username/check/', UsernameCheckView.as_view(), name='username_check'),
+
+    # Docs
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 ]
