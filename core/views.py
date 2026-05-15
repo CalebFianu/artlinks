@@ -28,6 +28,7 @@ from .serializers import (
     LinkCreateSerializer,
     LinkSerializer,
     LinkWithCollectionsSerializer,
+    PublicCollectionSerializer,
     RegisterSerializer,
     SocialCompleteSerializer,
 )
@@ -195,6 +196,8 @@ _SCOPED_ACTIONS = {
     'stats', 'recent_collection_links', 'featured_links', 'links_by_day',
 }
 
+_PUBLIC_ACTIONS = {'search'}
+
 _USERNAME_PARAM = OpenApiParameter(
     name='username',
     type=OpenApiTypes.STR,
@@ -208,6 +211,8 @@ class AppUserViewSet(ModelViewSet):
     serializer_class = AppUserSerializer
 
     def get_permissions(self):
+        if self.action in _PUBLIC_ACTIONS:
+            return [AllowAny()]
         if self.action in _SCOPED_ACTIONS:
             return [UserScopedReadPermission()]
         return [AppUserPermission()]
@@ -232,6 +237,14 @@ class AppUserViewSet(ModelViewSet):
                 {'detail': 'User not found.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+    @action(detail=False, methods=['get'], url_path='search')
+    def search(self, request):
+        q = request.query_params.get('q', '').strip()
+        if not q:
+            return Response([])
+        qs = AppUser.objects.filter(username__icontains=q).order_by('username')[:8]
+        return Response([{'username': u.username} for u in qs])
 
     @extend_schema(parameters=[_USERNAME_PARAM])
     @action(detail=False, methods=['get'], url_path='links')
@@ -290,7 +303,7 @@ class AppUserViewSet(ModelViewSet):
         ).order_by('id')
         return Response({
             'featured_links': LinkSerializer(featured, many=True).data,
-            'public_collections': CollectionSerializer(public_cols, many=True).data,
+            'public_collections': PublicCollectionSerializer(public_cols, many=True).data,
         })
 
     @extend_schema(parameters=[_USERNAME_PARAM])
@@ -438,11 +451,17 @@ class CollectionViewSet(ModelViewSet):
         ).distinct().order_by('id')
 
     def perform_create(self, serializer):
-        # Non-admins can only create collections for themselves
+        # Non-admins can only create collections for themselves.
+        # Admins may specify a target user via the 'user' field in the request body.
         if not self.request.user.is_admin:
             serializer.save(user=self.request.user)
         else:
-            serializer.save()
+            user_pk = self.request.data.get('user')
+            if user_pk:
+                target_user = AppUser.objects.get(pk=user_pk)
+                serializer.save(user=target_user)
+            else:
+                serializer.save(user=self.request.user)
 
     @extend_schema(request=LinkCreateSerializer, responses=CollectionSerializer)
     @action(detail=True, methods=['post'], url_path='add_link')

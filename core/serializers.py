@@ -92,7 +92,7 @@ class LinkSerializer(serializers.ModelSerializer):
             'id', 'url', 'title', 'description', 'link_day',
             'category', 'disabled_at', 'created_at', 'updated_at', 'user',
         ]
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at', 'user']
 
 
 class LinkCreateSerializer(serializers.ModelSerializer):
@@ -104,7 +104,17 @@ class LinkCreateSerializer(serializers.ModelSerializer):
 class CollectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Collection
-        fields = ['id', 'name', 'category', 'user', 'links']
+        fields = ['id', 'name', 'emoji', 'category', 'user', 'links']
+        read_only_fields = ['user']
+
+
+class PublicCollectionSerializer(serializers.ModelSerializer):
+    """Used in the public profile endpoint — links are full objects, not PKs."""
+    links = LinkSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Collection
+        fields = ['id', 'name', 'emoji', 'category', 'links']
 
 
 class CollectionSummarySerializer(serializers.ModelSerializer):
@@ -125,7 +135,7 @@ class LinkWithCollectionsSerializer(serializers.ModelSerializer):
             'id', 'url', 'title', 'description', 'link_day', 'category',
             'disabled_at', 'created_at', 'updated_at', 'user', 'collections',
         ]
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at', 'user']
 
     def get_collections(self, obj):
         target_user = self.context['target_user']

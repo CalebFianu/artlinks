@@ -44,6 +44,7 @@ class Collection(models.Model):
         PRIVATE = 'private', 'Private'
 
     name = models.CharField(max_length=255)
+    emoji = models.CharField(max_length=10, default='✺', blank=True)
     category = models.CharField(max_length=10, choices=Category.choices, default=Category.PUBLIC)
     user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name='collections')
     links = models.ManyToManyField(Link, related_name='collections', blank=True)

@@ -4,7 +4,16 @@
       "Bash(venv/Scripts/pip list:*)",
       "Bash(venv/Scripts/pip install:*)",
       "Bash(venv/Scripts/python manage.py check)",
-      "Bash(venv/Scripts/python manage.py shell -c ':*)"
+      "Bash(venv/Scripts/python manage.py shell -c ':*)",
+      "Bash(grep -E '\\\\.\\(json|txt|config|cfg\\)$')",
+      "Bash(npm create:*)",
+      "Bash(echo \"EXIT_CODE:$?\")",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(python -c ':*)",
+      "Bash(venv/Scripts/python -c ':*)",
+      "Bash(venv/Scripts/python manage.py migrate --check)",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" manage.py migrate)"
     ]
   }
 }
