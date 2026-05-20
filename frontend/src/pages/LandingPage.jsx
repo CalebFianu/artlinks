@@ -192,10 +192,10 @@ export default function LandingPage() {
     reader.readAsDataURL(file);
   };
 
-  const comingSoon = () => {
-    // Social auth buttons — placeholder until OAuth client IDs are configured
-    alert('Social sign-in coming soon.');
-  };
+  // Social sign-in shelved — uncomment when OAuth client IDs are configured
+  // const comingSoon = () => {
+  //   alert('Social sign-in coming soon.');
+  // };
 
   if (isLoading) return null;
 
@@ -614,10 +614,11 @@ export default function LandingPage() {
             <div className="al-modal-hd">
               <div className="al-eyebrow">welcome back</div>
               <h2 className="al-title">Log in to<br/><em>artlinks</em></h2>
-              <p className="al-sub">Sign in with a provider or your username.</p>
+              <p className="al-sub">Sign in with your username.</p>
             </div>
 
-            <div className="al-providers">
+            {/* Social sign-in shelved — uncomment when OAuth client IDs are configured */}
+            {/* <div className="al-providers">
               {[
                 { name: 'Google', icon: <GoogleIcon /> },
                 { name: 'Microsoft', icon: <MicrosoftIcon /> },
@@ -632,7 +633,7 @@ export default function LandingPage() {
 
             <div className="al-divider">
               <span /><span className="al-divider-txt">or</span><span />
-            </div>
+            </div> */}
 
             <form className="al-login-fields" onSubmit={handleLoginSubmit}>
               <div className="field">
@@ -744,7 +745,8 @@ export default function LandingPage() {
                 <button type="button" className="al-pw-toggle" onClick={() => setSuShowConfirm(v => !v)} aria-label="Toggle confirm">{suShowConfirm ? <EyeHide /> : <EyeShow />}</button>
               </div>
 
-              <div className="al-divider" style={{ margin: '20px 0 16px' }}>
+              {/* Social sign-in shelved — uncomment when OAuth client IDs are configured */}
+              {/* <div className="al-divider" style={{ margin: '20px 0 16px' }}>
                 <span /><span className="al-divider-txt">sign up with</span><span />
               </div>
 
@@ -757,7 +759,7 @@ export default function LandingPage() {
                     {icon}<span>{name}</span>
                   </button>
                 ))}
-              </div>
+              </div> */}
 
               {suError && <div className="al-error">{suError}</div>}
 
@@ -779,6 +781,29 @@ export default function LandingPage() {
 }
 
 // ── Icon helpers ──
+
+// Social sign-in shelved — uncomment when OAuth client IDs are configured
+// function GoogleIcon() {
+//   return (
+//     <svg width="20" height="20" viewBox="0 0 48 48" fill="none">
+//       <path d="M43.611 20.083H42V20H24v8h11.303C33.654 32.657 29.332 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" fill="#FFC107"/>
+//       <path d="M6.306 14.691l6.571 4.819C14.655 15.108 19.001 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" fill="#FF3D00"/>
+//       <path d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.314 0-9.825-3.317-11.568-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" fill="#4CAF50"/>
+//       <path d="M43.611 20.083H42V20H24v8h11.303a11.994 11.994 0 01-4.087 5.571l6.19 5.238C42.021 35.056 44 30 44 24c0-1.341-.138-2.65-.389-3.917z" fill="#1976D2"/>
+//     </svg>
+//   );
+// }
+// function MicrosoftIcon() {
+//   return (
+//     <svg width="20" height="20" viewBox="0 0 21 21" fill="none">
+//       <rect x="1" y="1" width="9" height="9" fill="#F35325"/>
+//       <rect x="11" y="1" width="9" height="9" fill="#81BC06"/>
+//       <rect x="1" y="11" width="9" height="9" fill="#05A6F0"/>
+//       <rect x="11" y="11" width="9" height="9" fill="#FFBA08"/>
+//     </svg>
+//   );
+// }
+
 function EyeShow() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
@@ -790,26 +815,6 @@ function EyeHide() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
       <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20C6.5 20 2 12 2 12a18.87 18.87 0 0 1 2.06-2.94M9.9 4.24A9.72 9.72 0 0 1 12 4c5.5 0 10 8 10 8a18.88 18.88 0 0 1-1.32 1.94M1 1l22 22"/>
-    </svg>
-  );
-}
-function GoogleIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 48 48" fill="none">
-      <path d="M43.611 20.083H42V20H24v8h11.303C33.654 32.657 29.332 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" fill="#FFC107"/>
-      <path d="M6.306 14.691l6.571 4.819C14.655 15.108 19.001 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" fill="#FF3D00"/>
-      <path d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.314 0-9.825-3.317-11.568-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" fill="#4CAF50"/>
-      <path d="M43.611 20.083H42V20H24v8h11.303a11.994 11.994 0 01-4.087 5.571l6.19 5.238C42.021 35.056 44 30 44 24c0-1.341-.138-2.65-.389-3.917z" fill="#1976D2"/>
-    </svg>
-  );
-}
-function MicrosoftIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 21 21" fill="none">
-      <rect x="1" y="1" width="9" height="9" fill="#F35325"/>
-      <rect x="11" y="1" width="9" height="9" fill="#81BC06"/>
-      <rect x="1" y="11" width="9" height="9" fill="#05A6F0"/>
-      <rect x="11" y="11" width="9" height="9" fill="#FFBA08"/>
     </svg>
   );
 }
