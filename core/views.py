@@ -192,11 +192,11 @@ class SocialCompleteView(APIView):
         return Response(_tokens_for(user), status=status.HTTP_201_CREATED)
 
 _SCOPED_ACTIONS = {
-    'links', 'links_by_month', 'profile', 'collections_summary',
+    'links', 'links_by_month', 'collections_summary',
     'stats', 'recent_collection_links', 'featured_links', 'links_by_day',
 }
 
-_PUBLIC_ACTIONS = {'search'}
+_PUBLIC_ACTIONS = {'search', 'profile'}
 
 _USERNAME_PARAM = OpenApiParameter(
     name='username',
