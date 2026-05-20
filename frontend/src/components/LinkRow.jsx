@@ -1,7 +1,7 @@
 import { I, cls } from './Icons';
 import { isFeatured, linkCollection, linkDate, fmt, collectionEmoji } from '../utils/models';
 
-export default function LinkRow({ link, collections, onEdit, onToggleFeatured, onDelete }) {
+export default function LinkRow({ link, collections, onEdit, onToggleFeatured, onDelete, dragHandleProps }) {
   const col = linkCollection(link, collections);
   const dateStr = linkDate(link);
   const featured = isFeatured(link);
@@ -9,7 +9,13 @@ export default function LinkRow({ link, collections, onEdit, onToggleFeatured, o
 
   return (
     <div className="link-row link-row-responsive">
-      <div className="drag"><I.drag size={16} /></div>
+      <div
+        className="drag"
+        {...(dragHandleProps || {})}
+        style={dragHandleProps ? { cursor: 'grab' } : { cursor: 'default' }}
+      >
+        {dragHandleProps && <I.drag size={16} />}
+      </div>
       <div style={{ minWidth: 0 }}>
         <div className="link-title" style={{ flexWrap: 'wrap', gap: 6 }}>
           {link.title}

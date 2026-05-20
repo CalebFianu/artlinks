@@ -90,9 +90,9 @@ class LinkSerializer(serializers.ModelSerializer):
         model = Link
         fields = [
             'id', 'url', 'title', 'description', 'link_day',
-            'category', 'disabled_at', 'created_at', 'updated_at', 'user',
+            'category', 'disabled_at', 'order', 'created_at', 'updated_at', 'user',
         ]
-        read_only_fields = ['created_at', 'updated_at', 'user']
+        read_only_fields = ['order', 'created_at', 'updated_at', 'user']
 
 
 class LinkCreateSerializer(serializers.ModelSerializer):

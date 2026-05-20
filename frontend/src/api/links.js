@@ -27,3 +27,5 @@ export const getUserFeaturedLinks = (username) =>
 
 export const getUserRecentCollectionLinks = (username) =>
   client.get(`/users/recent_collection_links?username=${encodeURIComponent(username)}`);
+
+export const reorderLinks = (ids) => client.post('/links/reorder/', { ids });

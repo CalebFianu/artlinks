@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import date
 
 from django.core import signing
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from drf_spectacular.types import OpenApiTypes
 from rest_framework import status
@@ -252,7 +252,9 @@ class AppUserViewSet(ModelViewSet):
         target_user, err = self._resolve_target_user(request)
         if err:
             return err
-        qs = Link.objects.filter(user=target_user).order_by('-created_at')
+        qs = Link.objects.filter(user=target_user).order_by(
+            F('order').asc(nulls_last=True), '-created_at'
+        )
         return Response(LinkSerializer(qs, many=True).data)
 
     @extend_schema(parameters=[
@@ -297,7 +299,7 @@ class AppUserViewSet(ModelViewSet):
             return err
         featured = Link.objects.filter(
             user=target_user, category=Link.Category.FEATURED,
-        ).order_by('-created_at')
+        ).order_by(F('order').asc(nulls_last=True), '-created_at')
         public_cols = Collection.objects.filter(
             user=target_user, category=Collection.Category.PUBLIC,
         ).order_by('id')
@@ -412,8 +414,24 @@ class LinkViewSet(ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user.is_admin:
-            return Link.objects.all().order_by('-created_at')
-        return Link.objects.filter(user=user).order_by('-created_at')
+            return Link.objects.all().order_by(F('order').asc(nulls_last=True), '-created_at')
+        return Link.objects.filter(user=user).order_by(F('order').asc(nulls_last=True), '-created_at')
+
+    @action(detail=False, methods=['post'], url_path='reorder')
+    def reorder(self, request):
+        ids = request.data.get('ids', [])
+        if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
+            return Response({'detail': 'ids must be a list of integers.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        owned = set(Link.objects.filter(id__in=ids, user=user).values_list('id', flat=True))
+        if len(owned) != len(ids):
+            return Response({'detail': 'Invalid link IDs.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        for position, link_id in enumerate(ids):
+            Link.objects.filter(id=link_id).update(order=position)
+
+        return Response({'detail': 'Reordered.'})
 
     def create(self, request, *args, **kwargs):
         create_serializer = self.get_serializer(data=request.data)

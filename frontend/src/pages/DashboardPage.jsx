@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { I, Doodles, cls } from '../components/Icons';
 import Sidebar from '../components/Sidebar';
-import LinkRow from '../components/LinkRow';
+import SortableLinkRow from '../components/SortableLinkRow';
 import LinkModal from '../components/LinkModal';
 import NewCollectionModal from '../components/NewCollectionModal';
 import Toast from '../components/Toast';
@@ -13,13 +15,12 @@ import { useAuth } from '../context/AuthContext';
 import { useTweaks } from '../context/TweaksContext';
 import { isFeatured, linkDate, todayStr, collectionEmoji } from '../utils/models';
 import { getUserStats } from '../api/links';
-import { useEffect } from 'react';
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTweaks();
   const navigate = useNavigate();
-  const { links, loading, addLink, updateLink, deleteLink, toggleFeatured } = useLinks(user?.username);
+  const { links, loading, addLink, updateLink, deleteLink, toggleFeatured, reorderLinks } = useLinks(user?.username);
   const { collections, addCollection } = useCollections();
   const { toast, showToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -87,6 +88,23 @@ export default function DashboardPage() {
     } catch (e) {
       const msg = e.response?.data?.category?.[0] || 'Could not update featured status.';
       showToast(msg);
+    }
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
+
+  const handleDragEnd = async ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    const oldIndex = filtered.findIndex((l) => l.id === active.id);
+    const newIndex = filtered.findIndex((l) => l.id === over.id);
+    const reordered = arrayMove(filtered, oldIndex, newIndex);
+    try {
+      await reorderLinks(reordered.map((l) => l.id));
+    } catch {
+      showToast('Failed to save order.');
     }
   };
 
@@ -214,16 +232,20 @@ export default function DashboardPage() {
                   <div>No links match{search ? ` "${search}"` : ' the current filter'}</div>
                 </div>
               )}
-              {filtered.map((link) => (
-                <LinkRow
-                  key={link.id}
-                  link={link}
-                  collections={collections}
-                  onEdit={() => setEditingLink(link)}
-                  onToggleFeatured={() => handleToggleFeatured(link.id)}
-                  onDelete={() => handleDelete(link.id)}
-                />
-              ))}
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={filtered.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+                  {filtered.map((link) => (
+                    <SortableLinkRow
+                      key={link.id}
+                      link={link}
+                      collections={collections}
+                      onEdit={() => setEditingLink(link)}
+                      onToggleFeatured={() => handleToggleFeatured(link.id)}
+                      onDelete={() => handleDelete(link.id)}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
             </div>
           )}
         </main>

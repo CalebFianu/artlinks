@@ -4,6 +4,7 @@ import {
   deleteLink as deleteLinkApi,
   updateLink as updateLinkApi,
   getUserLinks,
+  reorderLinks as reorderLinksApi,
 } from '../api/links';
 import { addLinkToCollection } from '../api/collections';
 
@@ -82,5 +83,27 @@ export function useLinks(username) {
     }
   };
 
-  return { links, loading, error, addLink, updateLink, deleteLink, toggleFeatured, refetch };
+  const reorderLinks = async (ids) => {
+    // Optimistic: assign order values to the provided IDs, keep everything else, then re-sort
+    const posMap = Object.fromEntries(ids.map((id, i) => [id, i]));
+    setLinks((prev) => {
+      const updated = prev.map((l) =>
+        l.id in posMap ? { ...l, order: posMap[l.id] } : l
+      );
+      return updated.sort((a, b) => {
+        const aO = a.order ?? Infinity;
+        const bO = b.order ?? Infinity;
+        if (aO !== bO) return aO - bO;
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+    });
+    try {
+      await reorderLinksApi(ids);
+    } catch (e) {
+      await refetch();
+      throw e;
+    }
+  };
+
+  return { links, loading, error, addLink, updateLink, deleteLink, toggleFeatured, reorderLinks, refetch };
 }

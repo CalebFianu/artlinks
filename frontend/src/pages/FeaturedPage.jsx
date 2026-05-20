@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { I, cls } from '../components/Icons';
 import Sidebar from '../components/Sidebar';
 import LinkModal from '../components/LinkModal';
@@ -16,7 +19,7 @@ const SLOTS = 8;
 export default function FeaturedPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { links, addLink, updateLink, deleteLink, toggleFeatured } = useLinks(user?.username);
+  const { links, addLink, updateLink, deleteLink, toggleFeatured, reorderLinks } = useLinks(user?.username);
   const { collections } = useCollections();
   const { toast, showToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -25,6 +28,23 @@ export default function FeaturedPage() {
   const [showAdd, setShowAdd] = useState(false);
 
   const featured = links.filter(isFeatured);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
+
+  const handleDragEnd = async ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    const oldIndex = featured.findIndex((l) => l.id === active.id);
+    const newIndex = featured.findIndex((l) => l.id === over.id);
+    const reordered = arrayMove(featured, oldIndex, newIndex);
+    try {
+      await reorderLinks(reordered.map((l) => l.id));
+    } catch {
+      showToast('Failed to save order.');
+    }
+  };
 
   const handleToggleFeatured = async (id) => {
     try {
@@ -102,42 +122,42 @@ export default function FeaturedPage() {
                 <div className="muted">tap star to add/remove</div>
               </div>
 
-              <div className="featured-slots">
-                {Array.from({ length: SLOTS }).map((_, i) => {
-                  const link = featured[i];
-                  if (!link) {
-                    return (
-                      <div
-                        key={'e' + i}
-                        className="slot empty"
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => setShowPicker(true)}
-                      >
-                        <span className="hand" style={{ fontSize: 18, color: 'var(--ink-mute)' }}>
-                          + add a featured link to slot {i + 1}
-                        </span>
-                      </div>
-                    );
-                  }
-                  const col = linkCollection(link, collections);
-                  const emoji = col ? collectionEmoji(col.id) : '◇';
-                  return (
-                    <div key={link.id} className="slot">
-                      <div className="slot-num">{i + 1}</div>
-                      <div>
-                        <div style={{ fontWeight: 500 }}>{link.title}</div>
-                        <div className="link-url">
-                          {link.url} · <span className="text-mute">{col ? `${emoji} ${col.name}` : '—'}</span>
-                        </div>
-                      </div>
-                      <div className="row" style={{ gap: 2 }}>
-                        <button className="icon-btn" onClick={() => setEditingLink(link)}><I.edit size={15} /></button>
-                        <button className="icon-btn" onClick={() => handleToggleFeatured(link.id)} title="Unfeature"><I.x size={15} /></button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={featured.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+                  <div className="featured-slots">
+                    {Array.from({ length: SLOTS }).map((_, i) => {
+                      const link = featured[i];
+                      if (!link) {
+                        return (
+                          <div
+                            key={'e' + i}
+                            className="slot empty"
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => setShowPicker(true)}
+                          >
+                            <span className="hand" style={{ fontSize: 18, color: 'var(--ink-mute)' }}>
+                              + add a featured link to slot {i + 1}
+                            </span>
+                          </div>
+                        );
+                      }
+                      const col = linkCollection(link, collections);
+                      const emoji = col ? collectionEmoji(col.id) : '◇';
+                      return (
+                        <SortableFeaturedSlot
+                          key={link.id}
+                          link={link}
+                          index={i}
+                          col={col}
+                          emoji={emoji}
+                          onEdit={() => setEditingLink(link)}
+                          onUnfeature={() => handleToggleFeatured(link.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
             </div>
 
             <div className="preview-phone">
@@ -188,6 +208,41 @@ export default function FeaturedPage() {
         />
       )}
       <Toast message={toast} />
+    </div>
+  );
+}
+
+function SortableFeaturedSlot({ link, index, col, emoji, onEdit, onUnfeature }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: link.id,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="slot"
+      {...attributes}
+      {...listeners}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        zIndex: isDragging ? 10 : 'auto',
+        position: 'relative',
+        cursor: isDragging ? 'grabbing' : 'grab',
+      }}
+    >
+      <div className="slot-num">{index + 1}</div>
+      <div>
+        <div style={{ fontWeight: 500 }}>{link.title}</div>
+        <div className="link-url">
+          {link.url} · <span className="text-mute">{col ? `${emoji} ${col.name}` : '—'}</span>
+        </div>
+      </div>
+      <div className="row" style={{ gap: 2 }}>
+        <button className="icon-btn" onPointerDown={(e) => e.stopPropagation()} onClick={onEdit}><I.edit size={15} /></button>
+        <button className="icon-btn" onPointerDown={(e) => e.stopPropagation()} onClick={onUnfeature} title="Unfeature"><I.x size={15} /></button>
+      </div>
     </div>
   );
 }
