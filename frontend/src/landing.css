@@ -127,6 +127,12 @@
 }
 .nav-links button.nav-text-link:hover { color: var(--ink); background: var(--paper-2); }
 
+/* Override sidebar's fixed 34×34 circle dimensions for the landing nav toggle */
+.lp-nav .theme-toggle {
+  width: auto;
+  height: auto;
+}
+
 @media (max-width: 640px) {
   .lp-nav { padding: 0 16px; height: 54px; gap: 8px; }
   .lp-nav .brand { font-size: 20px; }

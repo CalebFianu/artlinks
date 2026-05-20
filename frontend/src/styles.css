@@ -189,6 +189,7 @@ h3 { font-size: 20px; line-height: 1.2; }
 }
 .profile-chip .avatar {
   width: 34px; height: 34px;
+  flex-shrink: 0;
   border: var(--stroke) solid var(--ink);
   border-radius: 50%;
   display: grid; place-items: center;

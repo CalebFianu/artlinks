@@ -225,7 +225,6 @@ export default function LandingPage() {
                 <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
               </svg>
             )}
-            <span className="lp-nav-theme-label">{theme === 'dark' ? 'Dark' : 'Light'}</span>
           </button>
           <button onClick={() => setModal('login')}  className="btn small ghost" style={{ marginLeft: 4 }}>Log in</button>
           <button onClick={() => setModal('signup')} className="btn small primary">Sign up</button>

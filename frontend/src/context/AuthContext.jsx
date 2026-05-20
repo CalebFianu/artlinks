@@ -49,7 +49,7 @@ export function AuthProvider({ children }) {
   const _logout = () => {
     clear();
     setUser(null);
-    navigate('/login', { replace: true });
+    navigate('/', { replace: true });
   };
 
   const login = async (username, password) => {

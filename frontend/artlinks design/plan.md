@@ -309,6 +309,86 @@ The landing page is a faithful React port of `artlinks design/index.html`. All v
 
 ---
 
+## Social Sign-In — Implementation Plan
+
+> Backend verification logic is already built. The work below connects it to real OAuth providers.
+
+### Step 1 — Install frontend OAuth libraries
+
+```bash
+cd frontend
+npm install @react-oauth/google @azure/msal-browser
+```
+
+### Step 2 — Add environment variables
+
+**`frontend/.env`** (gitignored):
+```
+VITE_GOOGLE_CLIENT_ID=your-google-client-id
+VITE_MICROSOFT_CLIENT_ID=your-azure-app-client-id
+```
+
+**`frontend/.env.example`** (add these lines):
+```
+VITE_GOOGLE_CLIENT_ID=
+VITE_MICROSOFT_CLIENT_ID=
+```
+
+**Backend `artlinks/settings.py`** (or `.env`):
+```
+GOOGLE_CLIENT_ID=your-google-client-id   # already read by verify_google_token(), just never set
+```
+
+### Step 3 — Create OAuth app credentials (external)
+
+- **Google**: [console.cloud.google.com](https://console.cloud.google.com) → APIs & Services → Credentials → Create OAuth 2.0 Client ID (Web app). Add `http://localhost:5173` to authorized JavaScript origins.
+- **Microsoft**: [portal.azure.com](https://portal.azure.com) → App registrations → New registration. Add `http://localhost:5173` as a redirect URI (SPA type).
+
+### Step 4 — Wrap the app with `GoogleOAuthProvider` (`main.jsx`)
+
+```jsx
+import { GoogleOAuthProvider } from '@react-oauth/google';
+
+<GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
+  <BrowserRouter>
+    <AuthProvider>
+      <TweaksProvider>
+        <App />
+      </TweaksProvider>
+    </AuthProvider>
+  </BrowserRouter>
+</GoogleOAuthProvider>
+```
+
+### Step 5 — Implement `socialLogin` in `AuthContext.jsx`
+
+Add a `socialLogin(provider, tokenPayload)` method that:
+1. Calls `socialAuth(provider, tokenPayload)` from `api/auth.js`
+2. If response includes `{access, refresh}` → persist tokens, set user, navigate to `/dashboard`
+3. If response includes `pending_token` → store it in state and show username picker modal
+
+### Step 6 — Wire up buttons in `LandingPage.jsx`
+
+Replace `comingSoon()` on the Google and Microsoft buttons:
+
+- **Google**: use `useGoogleLogin()` hook from `@react-oauth/google` to get an ID token, then call `socialLogin('google', { id_token: ... })`
+- **Microsoft**: use MSAL's `loginPopup()` to get an access token, then call `socialLogin('microsoft', { access_token: ... })`
+
+### Step 7 — Add username picker modal (`LandingPage.jsx`)
+
+When `AuthContext` signals a `pending_token` (new social user, no username yet):
+- Show a modal with a username input + the same debounced availability check used in the signup form
+- On submit, call `socialComplete(pendingToken, username)` from `api/auth.js`, then persist tokens and navigate to `/dashboard`
+
+### Step 8 — Update the Deployment Checklist
+
+Add to the checklist:
+- [ ] Set `GOOGLE_CLIENT_ID` in backend environment
+- [ ] Add production origin to Google OAuth authorized origins and Microsoft redirect URIs
+- [ ] Set `VITE_GOOGLE_CLIENT_ID` and `VITE_MICROSOFT_CLIENT_ID` in production environment
+
+---
+
 ## Known Issues Fixed During Implementation
 
 | Issue | Fix |
