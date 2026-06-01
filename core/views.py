@@ -493,7 +493,15 @@ class CollectionViewSet(ModelViewSet):
         user = self.request.user
         if user.is_admin:
             return Collection.objects.all().order_by('id')
-        return Collection.objects.filter(user=user).order_by('id')
+        # List only shows the user's own collections (Collections page is personal).
+        # All other actions (retrieve, update, destroy, add_link) also include other
+        # users' public collections so that object-level permissions can correctly
+        # return 403 for write attempts rather than a misleading 404.
+        if self.action == 'list':
+            return Collection.objects.filter(user=user).order_by('id')
+        return Collection.objects.filter(
+            Q(user=user) | Q(category=Collection.Category.PUBLIC)
+        ).distinct().order_by('id')
 
     def perform_create(self, serializer):
         # Non-admins can only create collections for themselves.

@@ -409,7 +409,7 @@ class CollectionViewSetTests(APITestCase):
         self.assertIn(self.other_public.id, ids)
         self.assertIn(self.other_private.id, ids)
 
-    def test_owner_sees_own_and_others_public_collections(self):
+    def test_owner_sees_only_own_collections_in_list(self):
         self._auth(self.owner)
         response = self.client.get(self._list_url())
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -417,9 +417,8 @@ class CollectionViewSetTests(APITestCase):
         # Own collections (both public and private) are visible
         self.assertIn(self.owner_public.id, ids)
         self.assertIn(self.owner_private.id, ids)
-        # Other user's public collection is visible
-        self.assertIn(self.other_public.id, ids)
-        # Other user's private collection is NOT visible
+        # Other user's collections are NOT in the list (personal Collections page)
+        self.assertNotIn(self.other_public.id, ids)
         self.assertNotIn(self.other_private.id, ids)
 
     # --- create ---
@@ -825,6 +824,8 @@ class UserProfileTests(APITestCase):
         self.regular = make_link(self.creator, category=Link.Category.REGULAR)
         self.public_col = make_collection(self.creator, category=Collection.Category.PUBLIC)
         self.private_col = make_collection(self.creator, category=Collection.Category.PRIVATE)
+        # Public profile only shows collections that have at least one link
+        self.public_col.links.add(self.featured)
 
     def _auth(self, user):
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(user)}')
