@@ -389,6 +389,118 @@ Add to the checklist:
 
 ---
 
+## Forgot Password Flow — Implementation Plan
+
+### Overview
+
+Users have no way to recover their account if they forget their password. This adds a complete forgot/reset flow: an email with a secure 30-minute reset link, and a form to set a new password. No new models or migrations required — Django's built-in `PasswordResetTokenGenerator` handles token creation and validation statelessly via the user's password hash.
+
+### Step 1 — Email configuration (`artlinks/settings.py`)
+
+```python
+import os
+
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@artlinks.app')
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
+PASSWORD_RESET_TIMEOUT = 1800  # 30 minutes
+```
+
+In dev, the console backend prints the reset link to the terminal — no SMTP credentials needed to test locally.
+
+### Step 2 — New serializers (`core/serializers.py`)
+
+**`PasswordResetRequestSerializer`** — field: `email` (required)
+
+**`PasswordResetConfirmSerializer`** — fields: `uid`, `token`, `password`, `password_confirm`
+- Validates uid decodes to a real user, token is valid, passwords match, min 8 chars
+
+### Step 3 — New views (`core/views.py`)
+
+**`PasswordResetRequestView`** (`APIView`, `AllowAny`)
+1. Look up `AppUser` by email — silently skip if not found (prevents email enumeration)
+2. `uid = urlsafe_base64_encode(force_bytes(user.pk))`
+3. `token = PasswordResetTokenGenerator().make_token(user)`
+4. Send email: link is `{FRONTEND_URL}/reset-password?uid={uid}&token={token}`
+5. Always return `{"detail": "If that email is registered, a reset link has been sent."}`
+
+**`PasswordResetConfirmView`** (`APIView`, `AllowAny`)
+1. Decode uid → look up user (400 if invalid)
+2. `PasswordResetTokenGenerator().check_token(user, token)` (400 if expired/invalid)
+3. `user.set_password(password)` + `user.save()`
+4. Return `{"detail": "Password has been reset successfully."}`
+
+### Step 4 — New endpoints (`artlinks/urls.py`)
+
+Add alongside existing auth routes:
+```python
+path('api/auth/password-reset/', PasswordResetRequestView.as_view()),
+path('api/auth/password-reset/confirm/', PasswordResetConfirmView.as_view()),
+```
+
+Update the API endpoint table:
+
+| Method | URL | Auth | Description |
+|---|---|---|---|
+| POST | `/api/auth/password-reset/` | None | Request password reset email |
+| POST | `/api/auth/password-reset/confirm/` | None | Set new password using reset token |
+
+### Step 5 — New API functions (`frontend/src/api/auth.js`)
+
+```js
+export const requestPasswordReset = (email) =>
+  axios.post(`${BASE_URL}/auth/password-reset/`, { email });
+
+export const confirmPasswordReset = (uid, token, password, password_confirm) =>
+  axios.post(`${BASE_URL}/auth/password-reset/confirm/`, { uid, token, password, password_confirm });
+```
+
+Both use plain `axios` (not `client`) — no auth token needed.
+
+### Step 6 — New pages
+
+**`ForgotPasswordPage.jsx`** (`/forgot-password`)
+- Single email input field
+- On submit: calls `requestPasswordReset(email)`, shows success message ("Check your inbox — the link expires in 30 minutes")
+- Success state replaces the form entirely (user needs to go check email)
+- "Back to login" link at the bottom
+
+**`ResetPasswordPage.jsx`** (`/reset-password`)
+- Reads `uid` and `token` from URL query params on mount
+- If params are missing → show error + "Request a new link" button
+- Form: new password + confirm password fields (with show/hide toggles, matching existing auth page style)
+- On submit: calls `confirmPasswordReset(uid, token, password, passwordConfirm)`
+- On success: show success message + "Go to login" link
+- On error (expired/invalid token): show "This link has expired — request a new one" with link to `/forgot-password`
+
+Both pages use existing `.auth-page` / `.auth-card` CSS classes.
+
+### Step 7 — Routing and login link
+
+**`App.jsx`** — add two public routes:
+```jsx
+<Route path="/forgot-password" element={<ForgotPasswordPage />} />
+<Route path="/reset-password" element={<ResetPasswordPage />} />
+```
+
+**`LoginPage.jsx`** — add "Forgot password?" link below the password field, styled with the existing `.auth-link` class, pointing to `/forgot-password`.
+
+### Verification
+
+1. Start server → submit form with a registered email → reset link printed to Django terminal
+2. Copy link → submit new password → login with new password succeeds
+3. Unregistered email → same success message shown (no enumeration)
+4. Tamper the token in the URL → `ResetPasswordPage` shows expired/invalid error state
+5. Password mismatch → inline error before any API call
+6. Wait 30+ minutes → token rejected by backend
+
+---
+
 ## Known Issues Fixed During Implementation
 
 | Issue | Fix |
