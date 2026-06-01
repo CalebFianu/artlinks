@@ -30,6 +30,7 @@ class Link(models.Model):
     link_day = models.DateTimeField()
     category = models.CharField(max_length=10, choices=Category.choices, default=Category.REGULAR)
     disabled_at = models.DateTimeField(null=True, blank=True)
+    order = models.IntegerField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name='links')
@@ -44,6 +45,7 @@ class Collection(models.Model):
         PRIVATE = 'private', 'Private'
 
     name = models.CharField(max_length=255)
+    emoji = models.CharField(max_length=10, default='✺', blank=True)
     category = models.CharField(max_length=10, choices=Category.choices, default=Category.PUBLIC)
     user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name='collections')
     links = models.ManyToManyField(Link, related_name='collections', blank=True)

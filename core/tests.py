@@ -858,14 +858,16 @@ class UserProfileTests(APITestCase):
         response = self.client.get(self._url('creator'))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_creator_cannot_fetch_other_profile(self):
+    def test_creator_can_fetch_other_profile(self):
+        # Public profiles are readable by any authenticated user
         self._auth(self.creator)
         response = self.client.get(self._url('other'))
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_unauthenticated_returns_401(self):
+    def test_unauthenticated_can_fetch_profile(self):
+        # Public profiles are readable without authentication (needed for landing page search)
         response = self.client.get(self._url('creator'))
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
 # ---------------------------------------------------------------------------
