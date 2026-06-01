@@ -119,6 +119,7 @@ export default function LandingPage() {
   const [suLoading,     setSuLoading]    = useState(false);
   const [avatarSrc,     setAvatarSrc]    = useState(null);
   const avatarInputRef = useRef(null);
+  const avatarFileRef  = useRef(null);
 
   const avatarInitial = (suUsername || suEmail || '?')[0].toUpperCase();
 
@@ -128,6 +129,7 @@ export default function LandingPage() {
       setSuEmail(''); setSuUsername(''); setSuPw(''); setSuConfirm('');
       setSuShowPw(false); setSuShowConfirm(false); setSuUxStatus(''); setSuError('');
       setAvatarSrc(null);
+      avatarFileRef.current = null;
     }
   }, [modal]);
 
@@ -173,7 +175,7 @@ export default function LandingPage() {
     setSuLoading(true);
     setSuError('');
     try {
-      await register(suEmail.trim(), suUsername, suPw, suConfirm);
+      await register(suEmail.trim(), suUsername, suPw, suConfirm, avatarFileRef.current);
       // AuthContext navigates to /dashboard on success
     } catch (err) {
       const d = err.response?.data;
@@ -187,6 +189,7 @@ export default function LandingPage() {
   const handleAvatarUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    avatarFileRef.current = file;
     const reader = new FileReader();
     reader.onload = (ev) => setAvatarSrc(ev.target.result);
     reader.readAsDataURL(file);

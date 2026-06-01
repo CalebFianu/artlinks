@@ -29,6 +29,7 @@ export default function PublicProfilePage() {
 
   const [featuredLinks, setFeaturedLinks] = useState([]);
   const [publicCollections, setPublicCollections] = useState([]);
+  const [profilePicture, setProfilePicture] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [search, setSearch] = useState('');
@@ -42,6 +43,7 @@ export default function PublicProfilePage() {
       .then(({ data }) => {
         setFeaturedLinks(data.featured_links || []);
         setPublicCollections(data.public_collections || []);
+        setProfilePicture(data.profile_picture || null);
       })
       .catch((e) => {
         if (e.response?.status === 404) setNotFound(true);
@@ -122,7 +124,15 @@ export default function PublicProfilePage() {
       <div className="profile-card">
         {/* Avatar + bio */}
         <div className="profile-avatar">
-          {username?.[0]?.toUpperCase() || 'A'}
+          {profilePicture ? (
+            <img
+              src={profilePicture}
+              alt={username}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
+            />
+          ) : (
+            username?.[0]?.toUpperCase() || 'A'
+          )}
         </div>
 
         <div className="profile-name" style={{ position: 'relative', display: 'inline-block' }}>

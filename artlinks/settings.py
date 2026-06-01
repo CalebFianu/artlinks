@@ -173,6 +173,9 @@ STATIC_URL = 'static/'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Cloudinary — set CLOUDINARY_URL in .env to enable avatar uploads
+# cloudinary automatically reads CLOUDINARY_URL from the environment
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 

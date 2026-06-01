@@ -7,3 +7,4 @@ python-dotenv==1.2.2
 tzdata==2026.1
 django-cors-headers==4.9.0
 requests==2.34.2
+cloudinary==1.42.1

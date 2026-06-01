@@ -8,6 +8,7 @@ from drf_spectacular.types import OpenApiTypes
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -302,8 +303,9 @@ class AppUserViewSet(ModelViewSet):
         ).order_by(F('order').asc(nulls_last=True), '-created_at')
         public_cols = Collection.objects.filter(
             user=target_user, category=Collection.Category.PUBLIC,
-        ).order_by('id')
+        ).filter(links__isnull=False).distinct().order_by('id')
         return Response({
+            'profile_picture': target_user.profile_picture,
             'featured_links': LinkSerializer(featured, many=True).data,
             'public_collections': PublicCollectionSerializer(public_cols, many=True).data,
         })
@@ -376,6 +378,34 @@ class AppUserViewSet(ModelViewSet):
             user=target_user, category=Link.Category.FEATURED,
         ).order_by('-created_at')
         return Response(LinkSerializer(qs, many=True).data)
+
+    @action(detail=True, methods=['post'], url_path='avatar', parser_classes=[MultiPartParser])
+    def avatar(self, request, pk=None):
+        user = self.get_object()  # enforces AppUserPermission (own record only for non-admins)
+        file = request.FILES.get('image')
+
+        if not file:
+            return Response({'detail': 'No image provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        allowed = {'image/jpeg', 'image/png', 'image/webp'}
+        if file.content_type not in allowed:
+            return Response(
+                {'detail': 'Unsupported file type. Use JPEG, PNG, or WebP.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if file.size > 5 * 1024 * 1024:
+            return Response(
+                {'detail': 'File too large (max 5 MB).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from .cloudinary import upload_profile_picture
+        url = upload_profile_picture(file, file.name)
+
+        user.profile_picture = url
+        user.save(update_fields=['profile_picture'])
+        return Response({'profile_picture': url})
 
     @extend_schema(parameters=[
         _USERNAME_PARAM,
@@ -463,10 +493,7 @@ class CollectionViewSet(ModelViewSet):
         user = self.request.user
         if user.is_admin:
             return Collection.objects.all().order_by('id')
-        # Own collections (any category) + other users' public collections
-        return Collection.objects.filter(
-            Q(user=user) | Q(category=Collection.Category.PUBLIC)
-        ).distinct().order_by('id')
+        return Collection.objects.filter(user=user).order_by('id')
 
     def perform_create(self, serializer):
         # Non-admins can only create collections for themselves.

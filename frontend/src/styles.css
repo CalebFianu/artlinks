@@ -197,6 +197,9 @@ h3 { font-size: 20px; line-height: 1.2; }
   font-family: var(--font-display);
   font-size: 16px;
 }
+.profile-chip button:hover .avatar-upload-overlay {
+  opacity: 1 !important;
+}
 
 /* ============ MAIN ============ */
 .main {

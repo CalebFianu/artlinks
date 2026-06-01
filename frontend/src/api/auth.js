@@ -1,4 +1,5 @@
 import axios from 'axios';
+import client from './client';
 
 const BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -32,3 +33,15 @@ export const refreshToken = (refresh) =>
 
 export const searchUsers = (q) =>
   axios.get(`${BASE}/users/search?q=${encodeURIComponent(q)}`);
+
+// Authenticated calls
+export const getMe = (userId) =>
+  client.get(`/users/${userId}/`);
+
+export const uploadAvatar = (userId, file) => {
+  const form = new FormData();
+  form.append('image', file);
+  return client.post(`/users/${userId}/avatar/`, form, {
+    headers: { 'Content-Type': undefined },
+  });
+};
