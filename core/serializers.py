@@ -4,6 +4,13 @@ from rest_framework import serializers
 
 from .models import AppUser, Collection, Link
 
+
+class PrefixedURLField(serializers.URLField):
+    def to_internal_value(self, value):
+        if value and not value.startswith(('http://', 'https://')):
+            value = 'https://' + value
+        return super().to_internal_value(value)
+
 _USERNAME_RE = re.compile(r'^[a-z0-9-]+$')
 
 
@@ -86,6 +93,8 @@ class AppUserSerializer(serializers.ModelSerializer):
 
 
 class LinkSerializer(serializers.ModelSerializer):
+    url = PrefixedURLField()
+
     class Meta:
         model = Link
         fields = [
@@ -96,6 +105,8 @@ class LinkSerializer(serializers.ModelSerializer):
 
 
 class LinkCreateSerializer(serializers.ModelSerializer):
+    url = PrefixedURLField()
+
     class Meta:
         model = Link
         fields = ['url', 'title', 'description', 'link_day', 'category']
