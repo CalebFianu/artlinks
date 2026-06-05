@@ -16,7 +16,9 @@
       "Bash(\"venv\\\\Scripts\\\\python.exe\" manage.py migrate)",
       "Bash(venv/Scripts/python manage.py makemigrations)",
       "Bash(venv/Scripts/python manage.py migrate)",
-      "Bash(venv/Scripts/python manage.py test core.tests.UserProfileTests)"
+      "Bash(venv/Scripts/python manage.py test core.tests.UserProfileTests)",
+      "Bash(venv/Scripts/python manage.py test core --verbosity=1)",
+      "Bash(venv/Scripts/python manage.py test core)"
     ]
   }
 }

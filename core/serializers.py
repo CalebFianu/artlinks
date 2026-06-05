@@ -30,6 +30,7 @@ class RegisterSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
     password = serializers.CharField(write_only=True, min_length=8)
     password_confirm = serializers.CharField(write_only=True)
+    bio = serializers.CharField(max_length=500, allow_blank=True, required=False, default='')
 
     def validate_username(self, value):
         value = value.lower()
@@ -42,6 +43,11 @@ class RegisterSerializer(serializers.Serializer):
     def validate_email(self, value):
         if AppUser.objects.filter(email=value).exists():
             raise serializers.ValidationError('An account with this email already exists.')
+        return value
+
+    def validate_bio(self, value):
+        if value:
+            check_offensive_content(value, 'Bio')
         return value
 
     def validate(self, data):

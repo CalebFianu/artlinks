@@ -7,12 +7,13 @@ const BASE = import.meta.env.VITE_API_BASE_URL;
 export const login = (username, password) =>
   axios.post(`${BASE}/auth/token/`, { username, password });
 
-export const register = (email, username, password, passwordConfirm) =>
+export const register = (email, username, password, passwordConfirm, bio = '') =>
   axios.post(`${BASE}/auth/register/`, {
     email,
     username,
     password,
     password_confirm: passwordConfirm,
+    bio,
   });
 
 export const checkUsername = (username) =>

@@ -1,8 +1,6 @@
 import { Route, Routes } from 'react-router-dom';
 import PrivateRoute from './components/PrivateRoute';
 import LandingPage from './pages/LandingPage';
-import LoginPage from './pages/LoginPage';
-import SignupPage from './pages/SignupPage';
 import DashboardPage from './pages/DashboardPage';
 import CollectionsPage from './pages/CollectionsPage';
 import FeaturedPage from './pages/FeaturedPage';
@@ -14,10 +12,6 @@ export default function App() {
     <Routes>
       {/* Landing — redirects to /dashboard if already logged in */}
       <Route path="/" element={<LandingPage />} />
-
-      {/* Public auth routes */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/signup" element={<SignupPage />} />
 
       {/* Protected app routes */}
       <Route element={<PrivateRoute />}>

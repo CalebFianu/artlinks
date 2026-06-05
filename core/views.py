@@ -310,6 +310,7 @@ class AppUserViewSet(ModelViewSet):
         ).filter(links__isnull=False).distinct().order_by('id')
         return Response({
             'profile_picture': target_user.profile_picture,
+            'bio': target_user.bio,
             'featured_links': LinkSerializer(featured, many=True).data,
             'public_collections': PublicCollectionSerializer(public_cols, many=True).data,
         })

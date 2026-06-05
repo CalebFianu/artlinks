@@ -74,8 +74,8 @@ export function AuthProvider({ children }) {
     navigate('/dashboard', { replace: true });
   };
 
-  const register = async (email, username, password, passwordConfirm, avatarFile = null) => {
-    const { data } = await authApi.register(email, username, password, passwordConfirm);
+  const register = async (email, username, password, passwordConfirm, bio = '', avatarFile = null) => {
+    const { data } = await authApi.register(email, username, password, passwordConfirm, bio);
     const payload = decodeJwtPayload(data.access);
     const userObj = { id: payload.user_id, username };
     // Persist tokens first so the axios client can attach them to subsequent requests

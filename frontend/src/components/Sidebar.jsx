@@ -163,8 +163,8 @@ export default function Sidebar({ isOpen, onClose }) {
           </>
         ) : (
           <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-            <button className="btn ghost small" style={{ flex: 1, justifyContent: 'center' }} onClick={() => go('/login')}>Log in</button>
-            <button className="btn ghost small" style={{ flex: 1, justifyContent: 'center' }} onClick={() => go('/signup')}>Sign up</button>
+            <button className="btn ghost small" style={{ flex: 1, justifyContent: 'center' }} onClick={() => go('/')}>Log in</button>
+            <button className="btn ghost small" style={{ flex: 1, justifyContent: 'center' }} onClick={() => go('/')}>Sign up</button>
           </div>
         )}
       </div>

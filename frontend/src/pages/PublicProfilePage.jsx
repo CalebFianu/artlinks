@@ -30,6 +30,7 @@ export default function PublicProfilePage() {
   const [featuredLinks, setFeaturedLinks] = useState([]);
   const [publicCollections, setPublicCollections] = useState([]);
   const [profilePicture, setProfilePicture] = useState(null);
+  const [bio, setBio] = useState('');
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [search, setSearch] = useState('');
@@ -44,6 +45,7 @@ export default function PublicProfilePage() {
         setFeaturedLinks(data.featured_links || []);
         setPublicCollections(data.public_collections || []);
         setProfilePicture(data.profile_picture || null);
+        setBio(data.bio || '');
       })
       .catch((e) => {
         if (e.response?.status === 404) setNotFound(true);
@@ -140,6 +142,19 @@ export default function PublicProfilePage() {
           <Doodles.UnderlineWobble className="doodle accent" style={{ left: '50%', transform: 'translateX(-50%)', bottom: -12 }} />
         </div>
         <div className="profile-handle">@{username}</div>
+
+        {bio && (
+          <p style={{
+            margin: '12px 0 4px',
+            fontSize: 14,
+            lineHeight: 1.55,
+            color: 'var(--ink-soft)',
+            textAlign: 'center',
+            maxWidth: 340,
+          }}>
+            {bio}
+          </p>
+        )}
 
         {/* Search bar */}
         <div className="profile-search">

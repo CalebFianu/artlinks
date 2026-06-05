@@ -124,6 +124,7 @@ export default function LandingPage() {
   const [suConfirm,     setSuConfirm]    = useState('');
   const [suShowPw,      setSuShowPw]     = useState(false);
   const [suShowConfirm, setSuShowConfirm]= useState(false);
+  const [suBio,         setSuBio]        = useState('');
   const [suUxStatus,    setSuUxStatus]   = useState(''); // '' | 'checking' | 'ok' | 'taken' | 'short' | 'invalid'
   const [suError,       setSuError]      = useState('');
   const [suLoading,     setSuLoading]    = useState(false);
@@ -136,7 +137,7 @@ export default function LandingPage() {
   // Reset signup form when modal opens
   useEffect(() => {
     if (modal === 'signup') {
-      setSuEmail(''); setSuUsername(''); setSuPw(''); setSuConfirm('');
+      setSuEmail(''); setSuUsername(''); setSuBio(''); setSuPw(''); setSuConfirm('');
       setSuShowPw(false); setSuShowConfirm(false); setSuUxStatus(''); setSuError('');
       setAvatarSrc(null);
       avatarFileRef.current = null;
@@ -185,11 +186,11 @@ export default function LandingPage() {
     setSuLoading(true);
     setSuError('');
     try {
-      await register(suEmail.trim(), suUsername, suPw, suConfirm, avatarFileRef.current);
+      await register(suEmail.trim(), suUsername, suPw, suConfirm, suBio.trim(), avatarFileRef.current);
       // AuthContext navigates to /dashboard on success
     } catch (err) {
       const d = err.response?.data;
-      const msg = d?.email?.[0] || d?.username?.[0] || d?.password?.[0] || d?.detail || 'Registration failed.';
+      const msg = d?.email?.[0] || d?.username?.[0] || d?.bio?.[0] || d?.password?.[0] || d?.detail || 'Registration failed.';
       setSuError(msg);
     } finally {
       setSuLoading(false);
@@ -750,6 +751,25 @@ export default function LandingPage() {
                   <svg width="18" height="10" viewBox="0 0 18 10" fill="none" style={{ opacity: 0.35 }}><path d="M1 5 Q5 1 9 5 Q13 9 17 5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
                   lowercase, numbers and hyphens only
                 </div>
+              </div>
+              <div className="field">
+                <label>
+                  Bio
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--ink-mute)', marginLeft: 8 }}>(optional)</span>
+                </label>
+                <textarea
+                  value={suBio}
+                  onChange={(e) => { setSuBio(e.target.value); setSuError(''); }}
+                  placeholder="A short intro shown on your public profile…"
+                  maxLength={500}
+                  rows={3}
+                  style={{ resize: 'vertical', minHeight: 72 }}
+                />
+                {suBio.length > 0 && (
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--ink-mute)', textAlign: 'right', marginTop: 4 }}>
+                    {suBio.length}/500
+                  </div>
+                )}
               </div>
               <div className="field" style={{ position: 'relative' }}>
                 <label>Password</label>

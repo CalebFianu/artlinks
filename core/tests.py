@@ -839,6 +839,18 @@ class UserProfileTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('featured_links', response.data)
         self.assertIn('public_collections', response.data)
+        self.assertIn('bio', response.data)
+
+    def test_bio_returned_in_profile(self):
+        self.creator.bio = 'Illustrator and printmaker.'
+        self.creator.save(update_fields=['bio'])
+        response = self.client.get(self._url('creator'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['bio'], 'Illustrator and printmaker.')
+
+    def test_empty_bio_returned_as_empty_string(self):
+        response = self.client.get(self._url('creator'))
+        self.assertEqual(response.data['bio'], '')
 
     def test_only_featured_links_returned(self):
         self._auth(self.admin)
@@ -1279,3 +1291,175 @@ class UserLinksByDayTests(APITestCase):
     def test_unauthenticated_returns_401(self):
         response = self.client.get(self._url('creator', '2026-05-01'))
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ---------------------------------------------------------------------------
+# RegisterViewTests — POST /api/auth/register/
+# ---------------------------------------------------------------------------
+
+class RegisterViewTests(APITestCase):
+    def _url(self):
+        return reverse('register')
+
+    def _payload(self, **overrides):
+        base = {
+            'email': 'new@example.com',
+            'username': 'newuser',
+            'password': 'strongpass1',
+            'password_confirm': 'strongpass1',
+        }
+        base.update(overrides)
+        return base
+
+    def test_register_without_bio_succeeds(self):
+        response = self.client.post(self._url(), self._payload())
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn('access', response.data)
+        self.assertIn('refresh', response.data)
+
+    def test_register_without_bio_leaves_bio_blank(self):
+        self.client.post(self._url(), self._payload())
+        user = AppUser.objects.get(username='newuser')
+        self.assertEqual(user.bio, '')
+
+    def test_register_with_bio_saves_bio(self):
+        response = self.client.post(self._url(), self._payload(bio='Painter and printmaker.'))
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        user = AppUser.objects.get(username='newuser')
+        self.assertEqual(user.bio, 'Painter and printmaker.')
+
+    def test_register_with_empty_bio_succeeds(self):
+        response = self.client.post(self._url(), self._payload(bio=''))
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_register_sets_role_to_creator(self):
+        self.client.post(self._url(), self._payload())
+        user = AppUser.objects.get(username='newuser')
+        self.assertEqual(user.role, AppUser.Role.CREATOR)
+
+    def test_register_missing_email_returns_400(self):
+        payload = self._payload()
+        del payload['email']
+        response = self.client.post(self._url(), payload)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_register_password_mismatch_returns_400(self):
+        response = self.client.post(self._url(), self._payload(password_confirm='different'))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_register_duplicate_username_returns_400(self):
+        AppUser.objects.create_user(username='newuser', password='pass')
+        response = self.client.post(self._url(), self._payload())
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_register_duplicate_email_returns_400(self):
+        AppUser.objects.create_user(username='other', email='new@example.com', password='pass')
+        response = self.client.post(self._url(), self._payload())
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# ---------------------------------------------------------------------------
+# OffensiveContentTests — profanity validation across all affected fields
+# ---------------------------------------------------------------------------
+
+class OffensiveContentTests(APITestCase):
+    """
+    Verifies that better-profanity blocks offensive input on every field
+    that has a check_offensive_content validator.
+    """
+
+    _BAD = 'shit'  # reliably caught by better-profanity's default word list
+
+    def setUp(self):
+        self.user = AppUser.objects.create_user(
+            username='creator', password='pass123', role=AppUser.Role.CREATOR,
+        )
+
+    def _auth(self):
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer {get_access_token(self.user)}'
+        )
+
+    # --- register: username ---
+
+    def test_offensive_username_at_register_returns_400(self):
+        response = self.client.post(reverse('register'), {
+            'email': 'x@example.com',
+            'username': self._BAD,
+            'password': 'strongpass1',
+            'password_confirm': 'strongpass1',
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('username', response.data)
+
+    # --- register: bio ---
+
+    def test_offensive_bio_at_register_returns_400(self):
+        response = self.client.post(reverse('register'), {
+            'email': 'x@example.com',
+            'username': 'cleanname',
+            'password': 'strongpass1',
+            'password_confirm': 'strongpass1',
+            'bio': self._BAD,
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('bio', response.data)
+
+    # --- username check endpoint ---
+
+    def test_offensive_username_check_returns_unavailable(self):
+        url = reverse('username_check') + f'?username={self._BAD}'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data['available'])
+        self.assertIn('error', response.data)
+
+    # --- AppUser PATCH: bio ---
+
+    def test_offensive_bio_on_patch_returns_400(self):
+        self._auth()
+        url = reverse('appuser-detail', args=[self.user.pk])
+        response = self.client.patch(url, {'bio': self._BAD})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('bio', response.data)
+
+    def test_clean_bio_on_patch_succeeds(self):
+        self._auth()
+        url = reverse('appuser-detail', args=[self.user.pk])
+        response = self.client.patch(url, {'bio': 'Illustrator based in Berlin.'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['bio'], 'Illustrator based in Berlin.')
+
+    # --- Link: title and description ---
+
+    def test_offensive_link_title_returns_400(self):
+        self._auth()
+        response = self.client.post(reverse('link-list'), {
+            'url': 'https://example.com',
+            'title': self._BAD,
+            'link_day': timezone.now().isoformat(),
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('title', response.data)
+
+    def test_offensive_link_description_returns_400(self):
+        self._auth()
+        response = self.client.post(reverse('link-list'), {
+            'url': 'https://example.com',
+            'title': 'Clean title',
+            'description': self._BAD,
+            'link_day': timezone.now().isoformat(),
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('description', response.data)
+
+    # --- Collection: name ---
+
+    def test_offensive_collection_name_returns_400(self):
+        self._auth()
+        response = self.client.post(reverse('collection-list'), {
+            'name': self._BAD,
+            'category': Collection.Category.PUBLIC,
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('name', response.data)
