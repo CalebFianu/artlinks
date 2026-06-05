@@ -338,7 +338,9 @@
   max-width: 1200px;
   margin: 0 auto;
 }
-.lp-section + .lp-section {
+.lp-section + .lp-section,
+.proof-strip + .lp-section,
+.hero + .lp-section {
   border-top: 1.2px dashed var(--ink-mute);
 }
 .lp-section-hd {
@@ -506,7 +508,7 @@
   border-bottom: var(--stroke) solid var(--ink);
   padding: 48px 80px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 0;
   position: relative;
   overflow: hidden;

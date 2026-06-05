@@ -26,6 +26,16 @@ export default function LandingPage() {
     if (!isLoading && isAuthenticated) navigate('/dashboard', { replace: true });
   }, [isAuthenticated, isLoading, navigate]);
 
+  // ── Platform stats ──
+  const [platformStats, setPlatformStats] = useState(null);
+  useEffect(() => {
+    const base = import.meta.env.VITE_API_BASE_URL;
+    fetch(`${base}/platform-stats/`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setPlatformStats(data); })
+      .catch(() => {});
+  }, []);
+
   // ── Modal state ──
   const [modal, setModal] = useState(null); // null | 'login' | 'signup'
 
@@ -383,22 +393,26 @@ export default function LandingPage() {
       </section>
 
       {/* ── PROOF STRIP ── */}
-      <div className="proof-strip">
-        <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} viewBox="0 0 1200 140" preserveAspectRatio="xMidYMid slice" fill="none" aria-hidden="true">
-          <line x1="0" y1="28" x2="1200" y2="28" stroke="currentColor" strokeWidth="0.7" opacity="0.07"/>
-          <line x1="0" y1="56" x2="1200" y2="56" stroke="currentColor" strokeWidth="0.7" opacity="0.07"/>
-          <line x1="0" y1="84" x2="1200" y2="84" stroke="currentColor" strokeWidth="0.7" opacity="0.07"/>
-          <line x1="0" y1="112" x2="1200" y2="112" stroke="currentColor" strokeWidth="0.7" opacity="0.07"/>
-          <circle cx="60" cy="70" r="28" stroke="currentColor" strokeWidth="0.8" opacity="0.06" strokeDasharray="3 5"/>
-          <circle cx="1140" cy="70" r="28" stroke="currentColor" strokeWidth="0.8" opacity="0.06" strokeDasharray="3 5"/>
-        </svg>
-        {[['100+','Creators'],['2.3k','Links managed'],['2.4M','Clicks tracked'],['250+','Collections Created']].map(([num, label]) => (
-          <div key={label} className="proof-cell">
-            <div className="p-num">{num}</div>
-            <div className="p-label">{label}</div>
-          </div>
-        ))}
-      </div>
+{/*       <div className="proof-strip"> */}
+{/*         <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} viewBox="0 0 1200 140" preserveAspectRatio="xMidYMid slice" fill="none" aria-hidden="true"> */}
+{/*           <line x1="0" y1="28" x2="1200" y2="28" stroke="currentColor" strokeWidth="0.7" opacity="0.07"/> */}
+{/*           <line x1="0" y1="56" x2="1200" y2="56" stroke="currentColor" strokeWidth="0.7" opacity="0.07"/> */}
+{/*           <line x1="0" y1="84" x2="1200" y2="84" stroke="currentColor" strokeWidth="0.7" opacity="0.07"/> */}
+{/*           <line x1="0" y1="112" x2="1200" y2="112" stroke="currentColor" strokeWidth="0.7" opacity="0.07"/> */}
+{/*           <circle cx="60" cy="70" r="28" stroke="currentColor" strokeWidth="0.8" opacity="0.06" strokeDasharray="3 5"/> */}
+{/*           <circle cx="1140" cy="70" r="28" stroke="currentColor" strokeWidth="0.8" opacity="0.06" strokeDasharray="3 5"/> */}
+{/*         </svg> */}
+{/*         {[ */}
+{/*           [platformStats ? platformStats.creators.toLocaleString() : '—', 'Creators'], */}
+{/*           [platformStats ? platformStats.links.toLocaleString() : '—', 'Links managed'], */}
+{/*           [platformStats ? platformStats.collections.toLocaleString() : '—', 'Collections created'], */}
+{/*         ].map(([num, label]) => ( */}
+{/*           <div key={label} className="proof-cell"> */}
+{/*             <div className="p-num">{num}</div> */}
+{/*             <div className="p-label">{label}</div> */}
+{/*           </div> */}
+{/*         ))} */}
+{/*       </div> */}
 
       {/* ── FEATURES ── */}
       <section className="lp-section" id="features">
@@ -427,10 +441,10 @@ export default function LandingPage() {
             </svg>
             <div className="fc-label">Link management</div>
             <h3>Drag, organise, feature.</h3>
-            <p>Every link has a title, URL, collection tag, and click count. Drag to reorder. Feature up to 8 on your public page.</p>
+            <p>Every link has a title, URL and a collection tag. Drag to reorder. Feature up to 8 on your public page.</p>
             <div className="fc-visual">
               <div className="snippet-row">
-                {[['New essay — On making things slowly','featured','2,481'],['Latest zine: FOOTNOTES vol. 7','shop','944'],['Episode 48: Drawing from memory','podcast','3,120']].map(([title, tag, count]) => (
+                {[['New essay — On making things slowly','featured'],['Latest zine: FOOTNOTES vol. 7','shop'],['Episode 48: Drawing from memory','podcast']].map(([title, tag, count]) => (
                   <div key={title} className="snippet-link-row">
                     <span className="drag-handle">⠿</span>
                     <span style={{ fontWeight: 500 }}>{title}</span>

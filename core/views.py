@@ -433,6 +433,17 @@ class AppUserViewSet(ModelViewSet):
         return Response(LinkSerializer(qs, many=True).data)
 
 
+class PlatformStatsView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({
+            'creators': AppUser.objects.count(),
+            'links': Link.objects.count(),
+            'collections': Collection.objects.count(),
+        })
+
+
 class LinkViewSet(ModelViewSet):
     permission_classes = [LinkPermission]
 
