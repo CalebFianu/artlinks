@@ -3,6 +3,7 @@ import re
 from rest_framework import serializers
 
 from .models import AppUser, Collection, Link
+from .validators import check_offensive_content
 
 
 class PrefixedURLField(serializers.URLField):
@@ -33,6 +34,7 @@ class RegisterSerializer(serializers.Serializer):
     def validate_username(self, value):
         value = value.lower()
         _validate_username_format(value)
+        check_offensive_content(value, 'Username')
         if AppUser.objects.filter(username=value).exists():
             raise serializers.ValidationError('This username is already taken.')
         return value
@@ -63,6 +65,7 @@ class SocialCompleteSerializer(serializers.Serializer):
     def validate_username(self, value):
         value = value.lower()
         _validate_username_format(value)
+        check_offensive_content(value, 'Username')
         if AppUser.objects.filter(username=value).exists():
             raise serializers.ValidationError('This username is already taken.')
         return value
@@ -73,7 +76,12 @@ class AppUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AppUser
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'profile_picture', 'password']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'profile_picture', 'bio', 'password']
+
+    def validate_bio(self, value):
+        if value:
+            check_offensive_content(value, 'Bio')
+        return value
 
     def create(self, validated_data):
         password = validated_data.pop('password')
@@ -103,6 +111,15 @@ class LinkSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['order', 'created_at', 'updated_at', 'user']
 
+    def validate_title(self, value):
+        check_offensive_content(value, 'Title')
+        return value
+
+    def validate_description(self, value):
+        if value:
+            check_offensive_content(value, 'Description')
+        return value
+
 
 class LinkCreateSerializer(serializers.ModelSerializer):
     url = PrefixedURLField()
@@ -111,12 +128,25 @@ class LinkCreateSerializer(serializers.ModelSerializer):
         model = Link
         fields = ['url', 'title', 'description', 'link_day', 'category']
 
+    def validate_title(self, value):
+        check_offensive_content(value, 'Title')
+        return value
+
+    def validate_description(self, value):
+        if value:
+            check_offensive_content(value, 'Description')
+        return value
+
 
 class CollectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Collection
         fields = ['id', 'name', 'emoji', 'category', 'user', 'links']
         read_only_fields = ['user']
+
+    def validate_name(self, value):
+        check_offensive_content(value, 'Collection name')
+        return value
 
 
 class PublicCollectionSerializer(serializers.ModelSerializer):

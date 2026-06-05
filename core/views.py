@@ -16,6 +16,7 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import AppUser, Collection, Link
+from .validators import check_offensive_content
 from .permissions import (
     AppUserPermission,
     CollectionPermission,
@@ -70,6 +71,7 @@ class UsernameCheckView(APIView):
 
     def get(self, request):
         import re
+        from better_profanity import profanity
         username = request.query_params.get('username', '').lower()
         if not username:
             return Response({'available': False, 'error': 'username is required.'})
@@ -77,6 +79,8 @@ class UsernameCheckView(APIView):
             return Response({'available': False, 'error': 'Invalid characters.'})
         if len(username) < 3:
             return Response({'available': False, 'error': 'Too short (min 3 characters).'})
+        if profanity.contains_profanity(username):
+            return Response({'available': False, 'error': 'Username contains inappropriate content.'})
         available = not AppUser.objects.filter(username=username).exists()
         return Response({'available': available, 'username': username})
 
