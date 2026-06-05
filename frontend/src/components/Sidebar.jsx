@@ -1,10 +1,8 @@
-import { useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { I, cls } from './Icons';
 import { useAuth } from '../context/AuthContext';
 import { useTweaks } from '../context/TweaksContext';
-import Toast from './Toast';
-import { useToast } from '../hooks/useToast';
+
 
 const NAV_ITEMS = [
   { path: '/dashboard', label: 'All links', icon: I.link },
@@ -16,32 +14,13 @@ const NAV_ITEMS = [
 export default function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, uploadAvatar } = useAuth();
+  const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTweaks();
   const isDark = theme === 'dark';
-  const fileInputRef = useRef(null);
-  const [uploading, setUploading] = useState(false);
-  const { toast, showToast } = useToast();
 
   const go = (path) => {
     navigate(path);
     onClose();
-  };
-
-  const handleAvatarChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
-    setUploading(true);
-    try {
-      await uploadAvatar(file);
-      showToast('Profile picture updated');
-    } catch (err) {
-      const msg = err?.response?.data?.detail || 'Upload failed';
-      showToast(msg);
-    } finally {
-      setUploading(false);
-    }
   };
 
   return (
@@ -102,15 +81,14 @@ export default function Sidebar({ isOpen, onClose }) {
       <div className="sidebar-footer">
         {user ? (
           <>
-            <div className="profile-chip">
+            <div className="profile-chip" style={{ cursor: 'pointer' }} onClick={() => go('/account')} title="Manage account">
               <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                title="Change profile picture"
+                onClick={(e) => { e.stopPropagation(); go('/account'); }}
+                title="Manage account"
                 style={{
                   position: 'relative', flexShrink: 0,
                   width: 32, height: 32, borderRadius: '50%',
-                  border: 'none', padding: 0, cursor: uploading ? 'default' : 'pointer',
+                  border: 'none', padding: 0, cursor: 'pointer',
                   overflow: 'hidden', background: 'var(--accent-soft)',
                 }}
               >
@@ -122,10 +100,10 @@ export default function Sidebar({ isOpen, onClose }) {
                   />
                 ) : (
                   <span className="avatar" style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {uploading ? '…' : user.username?.[0]?.toUpperCase() || 'A'}
+                    {user.username?.[0]?.toUpperCase() || 'A'}
                   </span>
                 )}
-                {/* Camera overlay on hover */}
+                {/* Settings overlay on hover */}
                 <span style={{
                   position: 'absolute', inset: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -136,19 +114,10 @@ export default function Sidebar({ isOpen, onClose }) {
                   className="avatar-upload-overlay"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                    <circle cx="12" cy="13" r="4" />
+                    <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
                   </svg>
                 </span>
               </button>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                style={{ display: 'none' }}
-                onChange={handleAvatarChange}
-              />
 
               <div>
                 <div style={{ fontWeight: 500 }}>{user.username}</div>
@@ -168,7 +137,6 @@ export default function Sidebar({ isOpen, onClose }) {
           </div>
         )}
       </div>
-      <Toast message={toast} />
     </aside>
   );
 }

@@ -77,12 +77,21 @@ class SocialCompleteSerializer(serializers.Serializer):
         return value
 
 
+class UpdateProfileSerializer(serializers.Serializer):
+    bio = serializers.CharField(max_length=500, allow_blank=True, required=False)
+
+    def validate_bio(self, value):
+        if value:
+            check_offensive_content(value, 'Bio')
+        return value
+
+
 class AppUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
 
     class Meta:
         model = AppUser
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'profile_picture', 'bio', 'password']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'profile_picture', 'bio', 'disabled_at', 'password']
 
     def validate_bio(self, value):
         if value:

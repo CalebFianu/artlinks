@@ -1463,3 +1463,305 @@ class OffensiveContentTests(APITestCase):
         })
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('name', response.data)
+
+    # --- update_profile: bio ---
+
+    def test_offensive_bio_on_update_profile_returns_400(self):
+        self._auth()
+        url = reverse('appuser-update-profile')
+        response = self.client.patch(url, {'bio': self._BAD})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('bio', response.data)
+
+    def test_clean_bio_on_update_profile_succeeds(self):
+        self._auth()
+        url = reverse('appuser-update-profile')
+        response = self.client.patch(url, {'bio': 'Illustrator based in Berlin.'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['bio'], 'Illustrator based in Berlin.')
+
+
+# ---------------------------------------------------------------------------
+# UpdateProfileTests — PATCH /api/users/update_profile/
+# ---------------------------------------------------------------------------
+
+class UpdateProfileTests(APITestCase):
+    """
+    Authenticated users can update their own bio via update_profile.
+    Unauthenticated requests are blocked.
+    """
+
+    def setUp(self):
+        self.creator = AppUser.objects.create_user(
+            username='creator', password='pass', role=AppUser.Role.CREATOR,
+        )
+        self.other = AppUser.objects.create_user(
+            username='other', password='pass', role=AppUser.Role.CREATOR,
+        )
+
+    def _auth(self, user):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(user)}')
+
+    def _url(self):
+        return reverse('appuser-update-profile')
+
+    def test_authenticated_user_can_update_bio(self):
+        self._auth(self.creator)
+        response = self.client.patch(self._url(), {'bio': 'Hello world'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['bio'], 'Hello world')
+
+    def test_bio_is_saved_to_database(self):
+        self._auth(self.creator)
+        self.client.patch(self._url(), {'bio': 'Saved bio'})
+        self.creator.refresh_from_db()
+        self.assertEqual(self.creator.bio, 'Saved bio')
+
+    def test_empty_bio_is_allowed(self):
+        self.creator.bio = 'Old bio'
+        self.creator.save(update_fields=['bio'])
+        self._auth(self.creator)
+        response = self.client.patch(self._url(), {'bio': ''})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.creator.refresh_from_db()
+        self.assertEqual(self.creator.bio, '')
+
+    def test_update_only_affects_requesting_user(self):
+        self._auth(self.creator)
+        self.client.patch(self._url(), {'bio': 'Creator bio'})
+        self.other.refresh_from_db()
+        self.assertEqual(self.other.bio, '')
+
+    def test_unauthenticated_returns_401(self):
+        response = self.client.patch(self._url(), {'bio': 'Ghost bio'})
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ---------------------------------------------------------------------------
+# DisableAccountTests — POST /api/users/disable_account/
+# ---------------------------------------------------------------------------
+
+class DisableAccountTests(APITestCase):
+    """
+    POST /api/users/disable_account/ sets disabled_at to the current time.
+    Disabled users are excluded from search and their profile returns 404.
+    """
+
+    def setUp(self):
+        self.creator = AppUser.objects.create_user(
+            username='creator', password='pass', role=AppUser.Role.CREATOR,
+        )
+
+    def _auth(self, user):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(user)}')
+
+    def _url(self):
+        return reverse('appuser-disable-account')
+
+    def _search_url(self, q):
+        return reverse('appuser-search') + f'?q={q}'
+
+    def _profile_url(self, username):
+        return reverse('appuser-profile') + f'?username={username}'
+
+    def test_disabled_at_is_null_before_disabling(self):
+        self.assertIsNone(self.creator.disabled_at)
+
+    def test_disable_sets_disabled_at_timestamp(self):
+        self._auth(self.creator)
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.creator.refresh_from_db()
+        self.assertIsNotNone(self.creator.disabled_at)
+
+    def test_disabled_user_excluded_from_search(self):
+        self._auth(self.creator)
+        self.client.post(self._url())
+        self.client.credentials()  # drop auth
+        response = self.client.get(self._search_url('creator'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        usernames = [u['username'] for u in response.data]
+        self.assertNotIn('creator', usernames)
+
+    def test_disabled_user_profile_returns_404(self):
+        self._auth(self.creator)
+        self.client.post(self._url())
+        self.client.credentials()
+        response = self.client.get(self._profile_url('creator'))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_unauthenticated_cannot_disable(self):
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ---------------------------------------------------------------------------
+# ReEnableAccountTests — POST /api/users/re_enable_account/
+# ---------------------------------------------------------------------------
+
+class ReEnableAccountTests(APITestCase):
+    """
+    POST /api/users/re_enable_account/ clears disabled_at.
+    Re-enabled users reappear in search and their profile becomes accessible again.
+    """
+
+    def setUp(self):
+        self.creator = AppUser.objects.create_user(
+            username='creator', password='pass', role=AppUser.Role.CREATOR,
+        )
+        # Start with a pre-disabled account
+        self.creator.disabled_at = timezone.now()
+        self.creator.save(update_fields=['disabled_at'])
+
+    def _auth(self, user):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(user)}')
+
+    def _url(self):
+        return reverse('appuser-re-enable-account')
+
+    def _search_url(self, q):
+        return reverse('appuser-search') + f'?q={q}'
+
+    def _profile_url(self, username):
+        return reverse('appuser-profile') + f'?username={username}'
+
+    def test_re_enable_clears_disabled_at(self):
+        self._auth(self.creator)
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.creator.refresh_from_db()
+        self.assertIsNone(self.creator.disabled_at)
+
+    def test_re_enable_on_already_active_account_is_harmless(self):
+        self.creator.disabled_at = None
+        self.creator.save(update_fields=['disabled_at'])
+        self._auth(self.creator)
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.creator.refresh_from_db()
+        self.assertIsNone(self.creator.disabled_at)
+
+    def test_re_enabled_user_appears_in_search(self):
+        self._auth(self.creator)
+        self.client.post(self._url())
+        self.client.credentials()
+        response = self.client.get(self._search_url('creator'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        usernames = [u['username'] for u in response.data]
+        self.assertIn('creator', usernames)
+
+    def test_re_enabled_profile_is_accessible(self):
+        self._auth(self.creator)
+        self.client.post(self._url())
+        self.client.credentials()
+        response = self.client.get(self._profile_url('creator'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_unauthenticated_cannot_re_enable(self):
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ---------------------------------------------------------------------------
+# UserSearchTests — GET /api/users/search/?q=
+# ---------------------------------------------------------------------------
+
+class UserSearchTests(APITestCase):
+    """
+    Active users appear in search results; disabled users are always excluded.
+    """
+
+    def setUp(self):
+        self.alice = AppUser.objects.create_user(
+            username='alice', password='pass', role=AppUser.Role.CREATOR,
+        )
+        self.albert = AppUser.objects.create_user(
+            username='albert', password='pass', role=AppUser.Role.CREATOR,
+        )
+        self.disabled = AppUser.objects.create_user(
+            username='alicia', password='pass', role=AppUser.Role.CREATOR,
+            disabled_at=timezone.now(),
+        )
+
+    def _url(self, q):
+        return reverse('appuser-search') + f'?q={q}'
+
+    def test_active_users_appear_in_search(self):
+        response = self.client.get(self._url('ali'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        usernames = [u['username'] for u in response.data]
+        self.assertIn('alice', usernames)
+
+    def test_disabled_user_excluded_from_search(self):
+        response = self.client.get(self._url('ali'))
+        usernames = [u['username'] for u in response.data]
+        self.assertNotIn('alicia', usernames)
+
+    def test_multiple_active_matches_all_returned(self):
+        response = self.client.get(self._url('al'))
+        usernames = [u['username'] for u in response.data]
+        self.assertIn('alice', usernames)
+        self.assertIn('albert', usernames)
+
+    def test_empty_query_returns_empty_list(self):
+        response = self.client.get(self._url(''))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
+    def test_no_match_returns_empty_list(self):
+        response = self.client.get(self._url('zzz'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
+
+# ---------------------------------------------------------------------------
+# DisabledProfileAccessTests — GET /api/users/profile/?username=
+# ---------------------------------------------------------------------------
+
+class DisabledProfileAccessTests(APITestCase):
+    """
+    Accessing the profile of a disabled user returns 404 for all callers.
+    Active user profiles remain accessible.
+    """
+
+    def setUp(self):
+        self.active = AppUser.objects.create_user(
+            username='active', password='pass', role=AppUser.Role.CREATOR,
+        )
+        self.disabled = AppUser.objects.create_user(
+            username='disabled', password='pass', role=AppUser.Role.CREATOR,
+            disabled_at=timezone.now(),
+        )
+        self.visitor = AppUser.objects.create_user(
+            username='visitor', password='pass', role=AppUser.Role.CREATOR,
+        )
+
+    def _auth(self, user):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(user)}')
+
+    def _url(self, username):
+        return reverse('appuser-profile') + f'?username={username}'
+
+    def test_active_profile_accessible_unauthenticated(self):
+        response = self.client.get(self._url('active'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_active_profile_accessible_authenticated(self):
+        self._auth(self.visitor)
+        response = self.client.get(self._url('active'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_disabled_profile_returns_404_unauthenticated(self):
+        response = self.client.get(self._url('disabled'))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_disabled_profile_returns_404_authenticated(self):
+        self._auth(self.visitor)
+        response = self.client.get(self._url('disabled'))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_disabled_profile_returns_404_for_own_account(self):
+        # Even the disabled user themselves cannot access their public profile
+        self._auth(self.disabled)
+        response = self.client.get(self._url('disabled'))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

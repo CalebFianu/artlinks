@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import date
+from django.utils import timezone
 
 from django.core import signing
 from django.db.models import Count, F, Q
@@ -33,6 +34,7 @@ from .serializers import (
     PublicCollectionSerializer,
     RegisterSerializer,
     SocialCompleteSerializer,
+    UpdateProfileSerializer,
 )
 from .social_auth import verify_google_token, verify_microsoft_token
 
@@ -203,6 +205,8 @@ _SCOPED_ACTIONS = {
 
 _PUBLIC_ACTIONS = {'search', 'profile'}
 
+_SELF_ACTIONS = {'update_profile', 'disable_account'}
+
 _USERNAME_PARAM = OpenApiParameter(
     name='username',
     type=OpenApiTypes.STR,
@@ -221,6 +225,10 @@ class AppUserViewSet(ModelViewSet):
         if self.action in _SCOPED_ACTIONS:
             return [UserScopedReadPermission()]
         return [AppUserPermission()]
+
+    def _get_own_user(self, request):
+        """Return the authenticated user's own AppUser record."""
+        return AppUser.objects.get(pk=request.user.pk)
 
     def get_queryset(self):
         user = self.request.user
@@ -248,7 +256,9 @@ class AppUserViewSet(ModelViewSet):
         q = request.query_params.get('q', '').strip()
         if not q:
             return Response([])
-        qs = AppUser.objects.filter(username__icontains=q).order_by('username')[:8]
+        qs = AppUser.objects.filter(
+            username__icontains=q, disabled_at__isnull=True,
+        ).order_by('username')[:8]
         return Response([{'username': u.username} for u in qs])
 
     @extend_schema(parameters=[_USERNAME_PARAM])
@@ -302,6 +312,8 @@ class AppUserViewSet(ModelViewSet):
         target_user, err = self._resolve_target_user(request)
         if err:
             return err
+        if target_user.disabled_at is not None:
+            return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
         featured = Link.objects.filter(
             user=target_user, category=Link.Category.FEATURED,
         ).order_by(F('order').asc(nulls_last=True), '-created_at')
@@ -411,6 +423,30 @@ class AppUserViewSet(ModelViewSet):
         user.profile_picture = url
         user.save(update_fields=['profile_picture'])
         return Response({'profile_picture': url})
+
+    @action(detail=False, methods=['patch'], url_path='update_profile')
+    def update_profile(self, request):
+        user = self._get_own_user(request)
+        serializer = UpdateProfileSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        for attr, value in serializer.validated_data.items():
+            setattr(user, attr, value)
+        user.save(update_fields=list(serializer.validated_data.keys()))
+        return Response({'bio': user.bio})
+
+    @action(detail=False, methods=['post'], url_path='disable_account')
+    def disable_account(self, request):
+        user = self._get_own_user(request)
+        user.disabled_at = timezone.now()
+        user.save(update_fields=['disabled_at'])
+        return Response({'detail': 'Account disabled.'})
+
+    @action(detail=False, methods=['post'], url_path='re_enable_account')
+    def re_enable_account(self, request):
+        user = self._get_own_user(request)
+        user.disabled_at = None
+        user.save(update_fields=['disabled_at'])
+        return Response({'detail': 'Account re-enabled.'})
 
     @extend_schema(parameters=[
         _USERNAME_PARAM,

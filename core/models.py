@@ -11,6 +11,7 @@ class AppUser(AbstractUser):
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.GUEST)
     profile_picture = models.URLField(blank=True, null=True)
     bio = models.TextField(blank=True, default='')
+    disabled_at = models.DateTimeField(null=True, blank=True)
 
     @property
     def is_admin(self):

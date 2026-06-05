@@ -553,15 +553,22 @@ body[data-variant="studio"] .modal { box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--ink-mute);
-  margin-bottom: 14px;
+  margin-bottom: 18px;
 }
 .profile-bio {
-  font-size: 15px;
+  font-size: 14px;
+  line-height: 1.6;
   color: var(--ink-soft);
-  margin-bottom: 28px;
-  max-width: 36ch;
-  margin-left: auto;
-  margin-right: auto;
+  text-align: center;
+  max-width: 34ch;
+  margin: 0 auto 24px;
+}
+.profile-divider {
+  width: 48px;
+  height: 0;
+  border-top: 1.4px dashed var(--ink-mute);
+  margin: 0 auto 28px;
+  opacity: 0.6;
 }
 .profile-socials {
   display: flex;
@@ -1413,4 +1420,96 @@ body[data-variant="studio"] .auth-card { box-shadow: 0 12px 40px rgba(0,0,0,0.12
 
 @media (max-width: 480px) {
   .auth-card { padding: 28px 20px 24px; }
+}
+
+/* ============ ACCOUNT PAGE ============ */
+.account-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: start center;
+  padding: 80px 24px 80px;
+}
+
+.account-card {
+  width: min(560px, 100%);
+  position: relative;
+}
+
+.account-heading {
+  margin-bottom: 44px;
+}
+
+.account-section {
+  border: var(--stroke) solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--paper);
+  padding: 24px;
+  margin-bottom: 18px;
+  position: relative;
+}
+
+.account-section-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-mute);
+  margin-bottom: 18px;
+}
+
+.account-avatar-btn {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  border: var(--stroke) solid var(--ink);
+  background: var(--accent-soft);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  padding: 0;
+  transition: box-shadow 0.12s;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.account-avatar-btn:hover { box-shadow: 5px 5px 0 var(--ink); }
+.account-avatar-btn:hover .account-avatar-overlay { opacity: 1; }
+
+.account-avatar-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity 0.15s;
+  border-radius: 50%;
+}
+
+.danger-zone {
+  border-color: var(--ink-mute);
+  border-style: dashed;
+}
+.account-disabled-notice {
+  border-color: var(--ink);
+  background: var(--paper-2);
+}
+
+.danger-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+body[data-variant="studio"] .account-section { box-shadow: none; }
+
+@media (max-width: 600px) {
+  .account-wrap { padding: 72px 16px 80px; }
+  .danger-card { flex-direction: column; align-items: flex-start; }
 }

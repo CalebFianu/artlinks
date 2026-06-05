@@ -24,13 +24,17 @@ function clear() {
   localStorage.removeItem('artlinks:user');
 }
 
-// Fetch profile_picture after we have a valid token in localStorage
-async function fetchProfilePicture(userId) {
+// Fetch user fields not present in the JWT after we have a valid token in localStorage
+async function fetchUserData(userId) {
   try {
     const { data } = await authApi.getMe(userId);
-    return data.profile_picture || null;
+    return {
+      profile_picture: data.profile_picture || null,
+      disabled_at: data.disabled_at || null,
+      bio: data.bio || '',
+    };
   } catch {
-    return null;
+    return {};
   }
 }
 
@@ -68,7 +72,7 @@ export function AuthProvider({ children }) {
     const userObj = { id: payload.user_id, username };
     // Persist tokens first so getMe can attach them via the axios interceptor
     persist(data.access, data.refresh, userObj);
-    userObj.profile_picture = await fetchProfilePicture(payload.user_id);
+    Object.assign(userObj, await fetchUserData(payload.user_id));
     persist(data.access, data.refresh, userObj);
     setUser(userObj);
     navigate('/dashboard', { replace: true });
@@ -89,7 +93,7 @@ export function AuthProvider({ children }) {
       }
     }
     if (!userObj.profile_picture) {
-      userObj.profile_picture = await fetchProfilePicture(payload.user_id);
+      Object.assign(userObj, await fetchUserData(payload.user_id));
     }
     persist(data.access, data.refresh, userObj);
     setUser(userObj);
@@ -108,9 +112,32 @@ export function AuthProvider({ children }) {
     return data.profile_picture;
   };
 
+  const updateProfile = async (fields) => {
+    const { data } = await authApi.updateProfile(fields);
+    const updatedUser = { ...user, ...data };
+    const access = localStorage.getItem('artlinks:access');
+    const refresh = localStorage.getItem('artlinks:refresh');
+    persist(access, refresh, updatedUser);
+    setUser(updatedUser);
+  };
+
+  const disableAccount = async () => {
+    await authApi.disableAccount();
+    _logout();
+  };
+
+  const reEnableAccount = async () => {
+    await authApi.reEnableAccount();
+    const updatedUser = { ...user, disabled_at: null };
+    const access = localStorage.getItem('artlinks:access');
+    const refresh = localStorage.getItem('artlinks:refresh');
+    persist(access, refresh, updatedUser);
+    setUser(updatedUser);
+  };
+
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated: !!user, isLoading, login, register, logout, uploadAvatar }}
+      value={{ user, isAuthenticated: !!user, isLoading, login, register, logout, uploadAvatar, updateProfile, disableAccount, reEnableAccount }}
     >
       {children}
     </AuthContext.Provider>

@@ -46,3 +46,12 @@ export const uploadAvatar = (userId, file) => {
     headers: { 'Content-Type': undefined },
   });
 };
+
+export const updateProfile = (data) =>
+  client.patch('/users/update_profile/', data);
+
+export const disableAccount = () =>
+  client.post('/users/disable_account/');
+
+export const reEnableAccount = () =>
+  client.post('/users/re_enable_account/');

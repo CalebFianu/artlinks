@@ -144,17 +144,10 @@ export default function PublicProfilePage() {
         <div className="profile-handle">@{username}</div>
 
         {bio && (
-          <p style={{
-            margin: '12px 0 4px',
-            fontSize: 14,
-            lineHeight: 1.55,
-            color: 'var(--ink-soft)',
-            textAlign: 'center',
-            maxWidth: 340,
-          }}>
-            {bio}
-          </p>
+          <p className="profile-bio">{bio}</p>
         )}
+
+        <div className="profile-divider" />
 
         {/* Search bar */}
         <div className="profile-search">
@@ -253,7 +246,7 @@ export default function PublicProfilePage() {
         )}
 
         <div style={{ marginTop: 40, fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--ink-mute)' }}>
-          made with <span style={{ fontFamily: 'var(--font-display)', fontSize: 13 }}>artlinks</span>
+          made with <a href="/" style={{ fontFamily: 'var(--font-display)', fontSize: 13, color: 'inherit', textDecoration: 'none', borderBottom: '1px dashed var(--ink-mute)' }}>artlinks</a>
         </div>
 
         <Doodles.ArrowCurl className="doodle accent" style={{ left: -110, top: 150, transform: 'rotate(20deg)' }} />
