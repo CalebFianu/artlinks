@@ -353,7 +353,7 @@ class AppUserViewSet(ModelViewSet):
         if err:
             return err
         if target_user.disabled_at is not None:
-            return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'detail': 'Account disabled.', 'disabled': True}, status=status.HTTP_404_NOT_FOUND)
         featured = Link.objects.filter(
             user=target_user, category=Link.Category.FEATURED,
         ).order_by(F('order').asc(nulls_last=True), '-created_at')

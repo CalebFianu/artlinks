@@ -100,6 +100,7 @@ export default function AccountPage() {
     setDisabling(true);
     try {
       await disableAccount();
+      setShowDisableConfirm(false);
     } catch {
       showToast('Something went wrong');
       setDisabling(false);

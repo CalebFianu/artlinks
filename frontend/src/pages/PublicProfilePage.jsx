@@ -33,6 +33,7 @@ export default function PublicProfilePage() {
   const [bio, setBio] = useState('');
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [accountDisabled, setAccountDisabled] = useState(false);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('links');
   const [browseDate, setBrowseDate] = useState(null);
@@ -48,7 +49,10 @@ export default function PublicProfilePage() {
         setBio(data.bio || '');
       })
       .catch((e) => {
-        if (e.response?.status === 404) setNotFound(true);
+        if (e.response?.status === 404) {
+          if (e.response?.data?.disabled) setAccountDisabled(true);
+          else setNotFound(true);
+        }
       })
       .finally(() => setLoading(false));
   }, [username]);
@@ -85,6 +89,23 @@ export default function PublicProfilePage() {
     return (
       <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', color: 'var(--ink-mute)' }}>
         Loading…
+      </div>
+    );
+  }
+
+  if (accountDisabled) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', textAlign: 'center' }}>
+        {user && (
+          <button className="btn ghost small" onClick={() => navigate('/dashboard')} style={{ position: 'fixed', top: 20, left: 20, zIndex: 10 }}>
+            <span style={{ display: 'flex', transform: 'rotate(180deg)' }}><I.arrow size={14} /></span> back to editor
+          </button>
+        )}
+        <div>
+          <Doodles.Swirl style={{ margin: '0 auto 16px', color: 'var(--ink-mute)' }} />
+          <h2 style={{ fontFamily: 'var(--font-display)' }}>Account disabled</h2>
+          <p style={{ color: 'var(--ink-mute)' }}>Your account is disabled, so your public profile page won't be shown.</p>
+        </div>
       </div>
     );
   }

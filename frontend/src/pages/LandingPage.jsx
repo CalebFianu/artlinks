@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTweaks } from '../context/TweaksContext';
 import { checkUsername as apiCheckUsername, searchUsers } from '../api/auth';
+import { getUserProfile } from '../api/collections';
 import '../landing.css';
 
 const CREATORS = [
@@ -25,6 +26,14 @@ export default function LandingPage() {
   useEffect(() => {
     if (!isLoading && isAuthenticated) navigate('/dashboard', { replace: true });
   }, [isAuthenticated, isLoading, navigate]);
+
+  // ── Spotlight profile ──
+  const [spotlightProfile, setSpotlightProfile] = useState(null);
+  useEffect(() => {
+    getUserProfile('vanillacaleb')
+      .then(({ data }) => setSpotlightProfile(data))
+      .catch(() => {});
+  }, []);
 
   // ── Platform stats ──
   const [platformStats, setPlatformStats] = useState(null);
@@ -346,16 +355,7 @@ export default function LandingPage() {
             </svg>
             <span style={{ fontFamily: 'var(--font-hand)', fontSize: 15, color: 'var(--ink-mute)' }}>search by username</span>
           </div>
-          <p className="search-hint">
-            Try:{' '}
-            {['mina','tomas','yuki'].map((u, i) => (
-              <span key={u}>
-                <span style={{ cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }}
-                  onClick={() => { setSearchQuery(u); setSearchOpen(true); }}>@{u}</span>
-                {i < 2 && ' · '}
-              </span>
-            ))}
-          </p>
+
         </div>
 
         <div className="hero-visual">
@@ -509,7 +509,7 @@ export default function LandingPage() {
             <div className="fc-visual" style={{ marginTop: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, padding: '8px 16px', border: '1.2px solid oklch(0.35 0.04 240)', borderRadius: 999, color: 'oklch(0.55 0.04 240)' }}>
-                  artlinks.to/<span style={{ color: 'oklch(0.75 0.06 240)' }}>mina</span>
+                  artlinks.to/<span style={{ color: 'oklch(0.75 0.06 240)' }}>vanillacaleb</span>
                 </div>
                 <button onClick={() => setModal('signup')} style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'oklch(0.65 0.06 240)', background: 'none', border: 'none', cursor: 'pointer', borderBottom: '1px dashed oklch(0.4 0.04 240)' }}>
                   get your page →
@@ -536,32 +536,51 @@ export default function LandingPage() {
             <line x1="0" y1="12" x2="32" y2="12" stroke="currentColor" strokeWidth="1.2"/>
             <circle cx="37" cy="12" r="3.5" stroke="currentColor" strokeWidth="1.2"/>
           </svg>
-          <p className="eyebrow">Creators on artlinks</p>
-          <h2>Find your people.</h2>
-          <p>Search any username above to find a creator's page. Here are a few to get started.</p>
-          <div className="bracket-note" style={{ marginTop: 14, fontSize: 15 }}>
-            <svg width="10" height="32" viewBox="0 0 10 32" fill="none"><path d="M8 1 L2 1 L2 31 L8 31" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-            real creators, real work
-          </div>
+          <p className="eyebrow">See it in action</p>
+          <h2>What a profile looks like.</h2>
+          <p>Click the card below to see a real example of what your artlinks profile page looks like.</p>
         </div>
-        <div className="creator-grid">
-          {[
-            { name: 'Mina Okafor', handle: 'mina',  initial: 'M', bg: 'var(--accent-soft)',       bio: 'Essay writer, zine maker, slow thinker. New piece out every Thursday.',            tags: ['writing','shop','podcast'] },
-            { name: 'Tomás Reyes', handle: 'tomas', initial: 'T', bg: 'oklch(0.93 0.04 60)',      bio: 'Photographer and bookmaker. Studio in Lisbon. Prints available on demand.',        tags: ['photography','print','shop'] },
-            { name: 'Yuki Tanaka', handle: 'yuki',  initial: 'Y', bg: 'oklch(0.93 0.04 300)',     bio: 'Ambient composer and sound recordist. 4-hour sets, field recordings, calm.',        tags: ['music','ambient','field recordings'] },
-          ].map((c) => (
-            <div key={c.handle} className="creator-card" onClick={() => navigate(`/${c.handle}`)}>
-              <div className="cc-top">
-                <div className="cc-avatar" style={{ background: c.bg }}>{c.initial}</div>
-                <div>
-                  <div className="cc-name">{c.name}</div>
-                  <div className="cc-handle">@{c.handle}</div>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <div className="cc-flip-scene" onClick={() => navigate('/vanillacaleb')}>
+            <div className="cc-flipper">
+              {/* Front */}
+              <div className="creator-card cc-face cc-face-front">
+                <div className="cc-top">
+                  <div className="cc-avatar">
+                    {spotlightProfile?.profile_picture
+                      ? <img src={spotlightProfile.profile_picture} alt="vanillacaleb" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                      : 'V'}
+                  </div>
+                  <div>
+                    <div className="cc-name">vanillacaleb</div>
+                    <div className="cc-handle">@vanillacaleb</div>
+                  </div>
+                </div>
+                {spotlightProfile?.bio && (
+                  <p className="cc-bio">{spotlightProfile.bio}</p>
+                )}
+                {spotlightProfile?.public_collections?.length > 0 && (
+                  <div className="cc-tags">
+                    {spotlightProfile.public_collections.slice(0, 4).map(c => (
+                      <span key={c.id} className="tag">{c.name}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* Back */}
+              <div className="cc-face cc-face-back">
+                <div className="cc-back-inner">
+                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{ marginBottom: 14, opacity: 0.6 }}>
+                    <circle cx="14" cy="14" r="12" stroke="currentColor" strokeWidth="1.4"/>
+                    <path d="M6 14 Q10 8 14 14 Q18 20 22 14" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/>
+                    <line x1="2" y1="14" x2="26" y2="14" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
+                  </svg>
+                  <span className="cc-back-url">artlinks.to/vanillacaleb</span>
+                  <span className="cc-back-cta">view profile →</span>
                 </div>
               </div>
-              <p className="cc-bio">{c.bio}</p>
-              <div className="cc-tags">{c.tags.map(t => <span key={t} className="tag">{t}</span>)}</div>
             </div>
-          ))}
+          </div>
         </div>
       </section>
 

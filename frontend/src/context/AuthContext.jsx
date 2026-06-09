@@ -124,7 +124,11 @@ export function AuthProvider({ children }) {
 
   const disableAccount = async () => {
     await authApi.disableAccount();
-    _logout();
+    const updatedUser = { ...user, disabled_at: new Date().toISOString() };
+    const access = localStorage.getItem('artlinks:access');
+    const refresh = localStorage.getItem('artlinks:refresh');
+    persist(access, refresh, updatedUser);
+    setUser(updatedUser);
   };
 
   const reEnableAccount = async () => {

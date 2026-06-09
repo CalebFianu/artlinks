@@ -536,6 +536,55 @@
   border: var(--stroke) solid var(--ink);
 }
 .creator-card:hover { transform: translate(-2px,-2px); box-shadow: 5px 5px 0 var(--ink); }
+
+/* SPOTLIGHT FADE CARD */
+.cc-flip-scene {
+  cursor: pointer;
+  max-width: 320px;
+  position: relative;
+}
+.cc-flipper {
+  position: relative;
+}
+.cc-face-front {
+  transition: opacity 0.75s ease;
+}
+.cc-face-back {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.75s ease;
+  background: var(--ink);
+  color: var(--paper);
+  border: var(--stroke) solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: 3px 3px 0 var(--ink);
+  display: grid;
+  place-items: center;
+}
+.cc-flip-scene:hover .cc-face-front { opacity: 0; }
+.cc-flip-scene:hover .cc-face-back { opacity: 1; }
+.cc-face-back .cc-back-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.cc-face-back .cc-back-url {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.03em;
+}
+.cc-face-back .cc-back-cta {
+  font-size: 12px;
+  opacity: 0.6;
+  margin-top: 4px;
+}
+/* Disable the default hover translate inside the fade scene */
+.cc-flip-scene .creator-card:hover {
+  transform: none;
+  box-shadow: 3px 3px 0 var(--ink);
+}
 .creator-card .cc-top { display: flex; align-items: center; gap: 14px; }
 .creator-card .cc-avatar {
   width: 52px; height: 52px;
