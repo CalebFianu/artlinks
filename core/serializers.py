@@ -91,7 +91,7 @@ class AppUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AppUser
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'profile_picture', 'bio', 'disabled_at', 'password']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'profile_picture', 'bio', 'disabled_at', 'admin_disabled_at', 'password']
 
     def validate_bio(self, value):
         if value:
@@ -197,3 +197,17 @@ class LinkWithCollectionsSerializer(serializers.ModelSerializer):
         target_user = self.context['target_user']
         qs = obj.collections.filter(user=target_user)
         return CollectionSerializer(qs, many=True).data
+
+
+class AdminUserSerializer(serializers.ModelSerializer):
+    """Used by the admin dashboard — includes annotated link/collection counts."""
+    link_count = serializers.IntegerField(read_only=True)
+    collection_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = AppUser
+        fields = [
+            'id', 'username', 'email', 'date_joined',
+            'disabled_at', 'admin_disabled_at',
+            'link_count', 'collection_count',
+        ]

@@ -3,6 +3,13 @@ from rest_framework.permissions import BasePermission, SAFE_METHODS
 from .models import AppUser, Collection
 
 
+class IsAdminPermission(BasePermission):
+    """Allows access only to users with the admin role or superuser flag."""
+
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.is_admin
+
+
 class UserScopedReadPermission(BasePermission):
     """
     For read-only user-scoped actions resolved by ?username=.

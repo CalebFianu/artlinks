@@ -1765,3 +1765,396 @@ class DisabledProfileAccessTests(APITestCase):
         self._auth(self.disabled)
         response = self.client.get(self._url('disabled'))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+# ---------------------------------------------------------------------------
+# ArtlinksTokenObtainPairView — POST /api/auth/token/
+# ---------------------------------------------------------------------------
+
+class LoginViewTests(APITestCase):
+    """
+    The custom login view wraps simplejwt's TokenObtainPairView to block
+    accounts that have been admin-suspended (admin_disabled_at is set).
+
+    Key invariants:
+    - Wrong credentials always return 401 regardless of suspension status,
+      so callers cannot probe suspension status through error codes.
+    - Only admin_disabled_at blocks login; user-initiated disabled_at does not.
+    - A suspended user with correct credentials gets 403 with a support-email
+      message in `detail`.
+    """
+
+    def setUp(self):
+        self.active = AppUser.objects.create_user(
+            username='active', password='pass123', role=AppUser.Role.CREATOR,
+        )
+        self.suspended = AppUser.objects.create_user(
+            username='suspended', password='pass123', role=AppUser.Role.CREATOR,
+            admin_disabled_at=timezone.now(),
+        )
+        self.self_disabled = AppUser.objects.create_user(
+            username='selfdisabled', password='pass123', role=AppUser.Role.CREATOR,
+            disabled_at=timezone.now(),
+        )
+
+    def _url(self):
+        return reverse('token_obtain_pair')
+
+    def test_active_user_can_login(self):
+        response = self.client.post(self._url(), {'username': 'active', 'password': 'pass123'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+        self.assertIn('refresh', response.data)
+
+    def test_wrong_password_returns_401(self):
+        response = self.client.post(self._url(), {'username': 'active', 'password': 'wrong'})
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_suspended_user_with_correct_credentials_gets_403(self):
+        response = self.client.post(self._url(), {'username': 'suspended', 'password': 'pass123'})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_suspended_user_403_response_contains_detail(self):
+        response = self.client.post(self._url(), {'username': 'suspended', 'password': 'pass123'})
+        self.assertIn('detail', response.data)
+
+    def test_suspended_user_403_detail_mentions_support(self):
+        response = self.client.post(self._url(), {'username': 'suspended', 'password': 'pass123'})
+        self.assertIn('support', response.data['detail'].lower())
+
+    def test_suspended_user_with_wrong_password_gets_401_not_403(self):
+        # Wrong credentials must never reveal suspension status
+        response = self.client.post(self._url(), {'username': 'suspended', 'password': 'wrongpass'})
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_self_disabled_user_can_still_login(self):
+        # User-initiated disabled_at does NOT block login; only admin_disabled_at does
+        response = self.client.post(self._url(), {'username': 'selfdisabled', 'password': 'pass123'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+
+    def test_unknown_username_returns_401(self):
+        response = self.client.post(self._url(), {'username': 'nobody', 'password': 'pass123'})
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ---------------------------------------------------------------------------
+# AdminUserListView — GET /api/admin/users/
+# ---------------------------------------------------------------------------
+
+class AdminUserListViewTests(APITestCase):
+    """
+    GET /api/admin/users/?page=N
+
+    - Admin receives a paginated list of all users (page size 10).
+    - Each result includes link_count and collection_count annotations.
+    - Non-admins and unauthenticated callers are rejected.
+    - Pagination envelope (count / next / previous / results) is returned.
+    - Pagination links only appear when total users exceed 10.
+    """
+
+    def setUp(self):
+        self.admin = AppUser.objects.create_user(
+            username='admin', password='pass123', role=AppUser.Role.ADMIN,
+        )
+        self.creator = AppUser.objects.create_user(
+            username='creator', password='pass123', role=AppUser.Role.CREATOR,
+        )
+        make_link(self.creator)
+        make_link(self.creator)
+        make_collection(self.creator, name='Col A')
+
+    def _auth(self, user):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(user)}')
+
+    def _url(self, page=None):
+        url = reverse('admin-user-list')
+        if page is not None:
+            url += f'?page={page}'
+        return url
+
+    def test_admin_can_access_user_list(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_response_has_pagination_envelope(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url())
+        for key in ('count', 'results'):
+            with self.subTest(key=key):
+                self.assertIn(key, response.data)
+
+    def test_all_users_appear_in_results(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url())
+        ids = [u['id'] for u in response.data['results']]
+        self.assertIn(self.admin.id, ids)
+        self.assertIn(self.creator.id, ids)
+
+    def test_link_count_annotation_is_correct(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url())
+        creator_data = next(u for u in response.data['results'] if u['id'] == self.creator.id)
+        self.assertEqual(creator_data['link_count'], 2)
+
+    def test_collection_count_annotation_is_correct(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url())
+        creator_data = next(u for u in response.data['results'] if u['id'] == self.creator.id)
+        self.assertEqual(creator_data['collection_count'], 1)
+
+    def test_user_with_no_links_or_collections_shows_zero_counts(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url())
+        admin_data = next(u for u in response.data['results'] if u['id'] == self.admin.id)
+        self.assertEqual(admin_data['link_count'], 0)
+        self.assertEqual(admin_data['collection_count'], 0)
+
+    def test_result_includes_expected_fields(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url())
+        row = response.data['results'][0]
+        for field in ('id', 'username', 'email', 'date_joined', 'disabled_at', 'admin_disabled_at', 'link_count', 'collection_count'):
+            with self.subTest(field=field):
+                self.assertIn(field, row)
+
+    def test_count_reflects_total_users(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url())
+        self.assertEqual(response.data['count'], AppUser.objects.count())
+
+    def test_no_pagination_links_when_ten_or_fewer_users(self):
+        # setUp creates 2 users; well under 10
+        self._auth(self.admin)
+        response = self.client.get(self._url())
+        self.assertIsNone(response.data.get('next'))
+        self.assertIsNone(response.data.get('previous'))
+
+    def test_pagination_splits_results_beyond_ten_users(self):
+        # Create 9 more so total is 11 (admin + creator + 9 new)
+        for i in range(9):
+            AppUser.objects.create_user(username=f'user{i}', password='pass')
+        self._auth(self.admin)
+        page1 = self.client.get(self._url(page=1))
+        self.assertEqual(page1.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(page1.data['results']), 10)
+        self.assertIsNotNone(page1.data.get('next'))
+
+        page2 = self.client.get(self._url(page=2))
+        self.assertEqual(page2.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(page2.data['results']), 1)
+        self.assertIsNone(page2.data.get('next'))
+
+    def test_non_admin_creator_gets_403(self):
+        self._auth(self.creator)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_unauthenticated_gets_401(self):
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # --- search ---
+
+    def test_search_by_username_returns_matching_user(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url() + '?search=creator')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        usernames = [u['username'] for u in response.data['results']]
+        self.assertIn('creator', usernames)
+
+    def test_search_by_username_excludes_non_matching_users(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url() + '?search=creator')
+        usernames = [u['username'] for u in response.data['results']]
+        self.assertNotIn('admin', usernames)
+
+    def test_search_by_email_returns_matching_user(self):
+        self.creator.email = 'artist@example.com'
+        self.creator.save(update_fields=['email'])
+        self._auth(self.admin)
+        response = self.client.get(self._url() + '?search=artist@example')
+        usernames = [u['username'] for u in response.data['results']]
+        self.assertIn('creator', usernames)
+
+    def test_search_is_case_insensitive(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url() + '?search=CREATOR')
+        usernames = [u['username'] for u in response.data['results']]
+        self.assertIn('creator', usernames)
+
+    def test_search_with_no_matches_returns_empty_results(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url() + '?search=zzznomatch')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['results'], [])
+        self.assertEqual(response.data['count'], 0)
+
+    def test_empty_search_returns_all_users(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url() + '?search=')
+        self.assertEqual(response.data['count'], AppUser.objects.count())
+
+
+# ---------------------------------------------------------------------------
+# AdminDisableUserView — POST /api/admin/users/<pk>/disable/
+# ---------------------------------------------------------------------------
+
+class AdminDisableUserViewTests(APITestCase):
+    """
+    POST /api/admin/users/<pk>/disable/
+
+    - Admin can suspend any other user (sets admin_disabled_at).
+    - Suspended user cannot log in afterwards.
+    - Admin cannot suspend themselves (400).
+    - Non-existent PK returns 404.
+    - Non-admins and unauthenticated callers are rejected.
+    """
+
+    def setUp(self):
+        self.admin = AppUser.objects.create_user(
+            username='admin', password='pass123', role=AppUser.Role.ADMIN,
+        )
+        self.creator = AppUser.objects.create_user(
+            username='creator', password='pass123', role=AppUser.Role.CREATOR,
+        )
+
+    def _auth(self, user):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(user)}')
+
+    def _url(self, pk):
+        return reverse('admin-user-disable', args=[pk])
+
+    def test_admin_can_disable_creator(self):
+        self._auth(self.admin)
+        response = self.client.post(self._url(self.creator.pk))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_disable_sets_admin_disabled_at(self):
+        self._auth(self.admin)
+        self.client.post(self._url(self.creator.pk))
+        self.creator.refresh_from_db()
+        self.assertIsNotNone(self.creator.admin_disabled_at)
+
+    def test_disable_does_not_touch_user_disabled_at(self):
+        # admin_disabled_at and disabled_at are independent fields
+        self._auth(self.admin)
+        self.client.post(self._url(self.creator.pk))
+        self.creator.refresh_from_db()
+        self.assertIsNone(self.creator.disabled_at)
+
+    def test_suspended_user_cannot_login(self):
+        self._auth(self.admin)
+        self.client.post(self._url(self.creator.pk))
+        self.client.credentials()  # drop auth
+        response = self.client.post(
+            reverse('token_obtain_pair'),
+            {'username': 'creator', 'password': 'pass123'},
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_cannot_disable_themselves(self):
+        self._auth(self.admin)
+        response = self.client.post(self._url(self.admin.pk))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_disable_self_does_not_set_admin_disabled_at(self):
+        self._auth(self.admin)
+        self.client.post(self._url(self.admin.pk))
+        self.admin.refresh_from_db()
+        self.assertIsNone(self.admin.admin_disabled_at)
+
+    def test_nonexistent_user_returns_404(self):
+        self._auth(self.admin)
+        response = self.client.post(self._url(99999))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_non_admin_creator_gets_403(self):
+        other = AppUser.objects.create_user(
+            username='other', password='pass', role=AppUser.Role.CREATOR,
+        )
+        self._auth(self.creator)
+        response = self.client.post(self._url(other.pk))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_unauthenticated_gets_401(self):
+        response = self.client.post(self._url(self.creator.pk))
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ---------------------------------------------------------------------------
+# AdminEnableUserView — POST /api/admin/users/<pk>/enable/
+# ---------------------------------------------------------------------------
+
+class AdminEnableUserViewTests(APITestCase):
+    """
+    POST /api/admin/users/<pk>/enable/
+
+    - Admin can reinstate a suspended user (clears admin_disabled_at).
+    - Reinstated user can log in again.
+    - Re-enabling an already-active user is a no-op (still 200).
+    - Non-existent PK returns 404.
+    - Non-admins and unauthenticated callers are rejected.
+    """
+
+    def setUp(self):
+        self.admin = AppUser.objects.create_user(
+            username='admin', password='pass123', role=AppUser.Role.ADMIN,
+        )
+        self.suspended = AppUser.objects.create_user(
+            username='suspended', password='pass123', role=AppUser.Role.CREATOR,
+            admin_disabled_at=timezone.now(),
+        )
+        self.active = AppUser.objects.create_user(
+            username='active', password='pass123', role=AppUser.Role.CREATOR,
+        )
+
+    def _auth(self, user):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(user)}')
+
+    def _url(self, pk):
+        return reverse('admin-user-enable', args=[pk])
+
+    def test_admin_can_enable_suspended_user(self):
+        self._auth(self.admin)
+        response = self.client.post(self._url(self.suspended.pk))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_enable_clears_admin_disabled_at(self):
+        self._auth(self.admin)
+        self.client.post(self._url(self.suspended.pk))
+        self.suspended.refresh_from_db()
+        self.assertIsNone(self.suspended.admin_disabled_at)
+
+    def test_reinstated_user_can_login(self):
+        self._auth(self.admin)
+        self.client.post(self._url(self.suspended.pk))
+        self.client.credentials()  # drop auth
+        response = self.client.post(
+            reverse('token_obtain_pair'),
+            {'username': 'suspended', 'password': 'pass123'},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+
+    def test_enable_already_active_user_is_harmless(self):
+        self._auth(self.admin)
+        response = self.client.post(self._url(self.active.pk))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.active.refresh_from_db()
+        self.assertIsNone(self.active.admin_disabled_at)
+
+    def test_nonexistent_user_returns_404(self):
+        self._auth(self.admin)
+        response = self.client.post(self._url(99999))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_non_admin_creator_gets_403(self):
+        self._auth(self.active)
+        response = self.client.post(self._url(self.suspended.pk))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_unauthenticated_gets_401(self):
+        response = self.client.post(self._url(self.suspended.pk))
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

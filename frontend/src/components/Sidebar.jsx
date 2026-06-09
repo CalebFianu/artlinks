@@ -76,6 +76,36 @@ export default function Sidebar({ isOpen, onClose }) {
             <span className="mono" style={{ fontSize: 10, marginLeft: 'auto', opacity: 0.7 }}>↗</span>
           </div>
         )}
+        {user?.role === 'admin' && (
+          <>
+            <div
+              style={{
+                margin: '8px 0 4px',
+                padding: '0 2px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 9,
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                color: 'var(--ink-mute)',
+                opacity: 0.6,
+              }}
+            >
+              Admin
+            </div>
+            <div
+              className={cls('nav-item', location.pathname === '/admin' && 'active')}
+              onClick={() => go('/admin')}
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+              <span>Users</span>
+            </div>
+          </>
+        )}
       </nav>
 
       <div className="sidebar-footer">

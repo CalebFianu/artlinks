@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom';
 import PrivateRoute from './components/PrivateRoute';
+import AdminRoute from './components/AdminRoute';
 import LandingPage from './pages/LandingPage';
 import DashboardPage from './pages/DashboardPage';
 import CollectionsPage from './pages/CollectionsPage';
@@ -7,6 +8,7 @@ import FeaturedPage from './pages/FeaturedPage';
 import DailyPage from './pages/DailyPage';
 import PublicProfilePage from './pages/PublicProfilePage';
 import AccountPage from './pages/AccountPage';
+import AdminPage from './pages/AdminPage';
 
 export default function App() {
   return (
@@ -21,6 +23,11 @@ export default function App() {
         <Route path="/featured" element={<FeaturedPage />} />
         <Route path="/daily" element={<DailyPage />} />
         <Route path="/account" element={<AccountPage />} />
+      </Route>
+
+      {/* Admin-only routes */}
+      <Route element={<AdminRoute />}>
+        <Route path="/admin" element={<AdminPage />} />
       </Route>
 
       {/* Public profile — no auth required; must come after named routes */}

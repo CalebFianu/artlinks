@@ -9,22 +9,26 @@ from drf_spectacular.types import OpenApiTypes
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import AppUser, Collection, Link
 from .validators import check_offensive_content
 from .permissions import (
     AppUserPermission,
     CollectionPermission,
+    IsAdminPermission,
     LinkPermission,
     UserScopedReadPermission,
 )
 from .serializers import (
+    AdminUserSerializer,
     AppUserSerializer,
     CollectionSerializer,
     CollectionSummarySerializer,
@@ -37,6 +41,8 @@ from .serializers import (
     UpdateProfileSerializer,
 )
 from .social_auth import verify_google_token, verify_microsoft_token
+
+_SUPPORT_EMAIL = 'support@artlinks.to'
 
 # Pending social-signup tokens are valid for 10 minutes
 _PENDING_TOKEN_MAX_AGE = 600
@@ -51,6 +57,34 @@ _SOCIAL_PROVIDERS = {
 def _tokens_for(user: AppUser) -> dict:
     refresh = RefreshToken.for_user(user)
     return {'access': str(refresh.access_token), 'refresh': str(refresh)}
+
+
+class ArtlinksTokenObtainPairView(TokenObtainPairView):
+    """
+    Extends the standard JWT login view to block admin-suspended accounts.
+    Credential validation runs first so wrong-password attempts still get
+    a generic 'No active account found' rather than revealing suspension status.
+    """
+
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            username = request.data.get('username', '')
+            try:
+                user = AppUser.objects.get(username=username)
+                if user.admin_disabled_at is not None:
+                    return Response(
+                        {
+                            'detail': (
+                                f'Your account has been suspended. '
+                                f'Please contact support at {_SUPPORT_EMAIL}.'
+                            )
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            except AppUser.DoesNotExist:
+                pass
+        return response
 
 
 class RegisterView(APIView):
@@ -483,6 +517,81 @@ class PlatformStatsView(APIView):
             'links': Link.objects.count(),
             'collections': Collection.objects.count(),
         })
+
+
+# ── Admin user management ────────────────────────────────────────────────────
+
+class AdminUserPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = None  # fixed at 10; no client override
+
+
+class AdminUserListView(APIView):
+    """
+    GET /api/admin/users/?page=N&search=<term>
+    Returns a paginated list of all users with annotated link and collection counts.
+    Optional ?search= filters by username or email (case-insensitive contains).
+    Accessible only to admins.
+    """
+    permission_classes = [IsAdminPermission]
+
+    def get(self, request):
+        qs = (
+            AppUser.objects
+            .annotate(
+                link_count=Count('links', distinct=True),
+                collection_count=Count('collections', distinct=True),
+            )
+            .order_by('date_joined')
+        )
+        search = request.query_params.get('search', '').strip()
+        if search:
+            qs = qs.filter(
+                Q(username__icontains=search) | Q(email__icontains=search)
+            )
+        paginator = AdminUserPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = AdminUserSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+
+class AdminDisableUserView(APIView):
+    """
+    POST /api/admin/users/<pk>/disable/
+    Sets admin_disabled_at on the target user, blocking their login.
+    """
+    permission_classes = [IsAdminPermission]
+
+    def post(self, request, pk):
+        try:
+            user = AppUser.objects.get(pk=pk)
+        except AppUser.DoesNotExist:
+            return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if user == request.user:
+            return Response(
+                {'detail': 'You cannot suspend your own account.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user.admin_disabled_at = timezone.now()
+        user.save(update_fields=['admin_disabled_at'])
+        return Response({'detail': f'@{user.username} has been suspended.'})
+
+
+class AdminEnableUserView(APIView):
+    """
+    POST /api/admin/users/<pk>/enable/
+    Clears admin_disabled_at, reinstating the user's login access.
+    """
+    permission_classes = [IsAdminPermission]
+
+    def post(self, request, pk):
+        try:
+            user = AppUser.objects.get(pk=pk)
+        except AppUser.DoesNotExist:
+            return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+        user.admin_disabled_at = None
+        user.save(update_fields=['admin_disabled_at'])
+        return Response({'detail': f'@{user.username} has been reinstated.'})
 
 
 class LinkViewSet(ModelViewSet):

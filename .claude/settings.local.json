@@ -20,7 +20,10 @@
       "Bash(venv/Scripts/python manage.py test core --verbosity=1)",
       "Bash(venv/Scripts/python manage.py test core)",
       "Bash(venv/Scripts/python manage.py makemigrations core --name add_disabled_at_to_appuser)",
-      "Bash(venv/Scripts/python manage.py test core --verbosity=2)"
+      "Bash(venv/Scripts/python manage.py test core --verbosity=2)",
+      "Bash(venv/Scripts/python manage.py test core --verbosity=2 --keepdb)",
+      "Bash(venv/Scripts/python manage.py test core --keepdb)",
+      "Bash(venv/Scripts/python manage.py test core.tests.AdminUserListViewTests --keepdb --verbosity=2)"
     ]
   }
 }

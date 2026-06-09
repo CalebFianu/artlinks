@@ -32,6 +32,7 @@ async function fetchUserData(userId) {
       profile_picture: data.profile_picture || null,
       disabled_at: data.disabled_at || null,
       bio: data.bio || '',
+      role: data.role || 'guest',
     };
   } catch {
     return {};
