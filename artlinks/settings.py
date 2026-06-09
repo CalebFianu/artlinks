@@ -180,3 +180,15 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Email — Mailjet SMTP relay (free tier: 6,000 emails/month)
+# Set EMAIL_BACKEND in the environment to switch from console to real sending.
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = 'in-v3.mailjet.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get('MAILJET_API_KEY', '')
+EMAIL_HOST_PASSWORD = os.environ.get('MAILJET_SECRET_KEY', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@artlinks.app')
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
+PASSWORD_RESET_TIMEOUT = 1800  # 30 minutes

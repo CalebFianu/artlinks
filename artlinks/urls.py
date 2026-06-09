@@ -19,7 +19,15 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from core.views import ArtlinksTokenObtainPairView, RegisterView, SocialAuthView, SocialCompleteView, UsernameCheckView
+from core.views import (
+    ArtlinksTokenObtainPairView,
+    PasswordResetConfirmView,
+    PasswordResetRequestView,
+    RegisterView,
+    SocialAuthView,
+    SocialCompleteView,
+    UsernameCheckView,
+)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -33,6 +41,10 @@ urlpatterns = [
     # Auth — social (Google, Microsoft)
     path('api/auth/social/<str:provider>/', SocialAuthView.as_view(), name='social_auth'),
     path('api/auth/social/complete/', SocialCompleteView.as_view(), name='social_complete'),
+
+    # Auth — password reset
+    path('api/auth/password-reset/', PasswordResetRequestView.as_view(), name='password_reset'),
+    path('api/auth/password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
 
     # Helpers
     path('api/auth/username/check/', UsernameCheckView.as_view(), name='username_check'),

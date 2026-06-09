@@ -1,7 +1,11 @@
 import datetime
 
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.core import mail
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -2158,3 +2162,137 @@ class AdminEnableUserViewTests(APITestCase):
     def test_unauthenticated_gets_401(self):
         response = self.client.post(self._url(self.suspended.pk))
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ---------------------------------------------------------------------------
+# Password Reset Flow
+# ---------------------------------------------------------------------------
+
+class PasswordResetRequestTests(APITestCase):
+    """
+    POST /api/auth/password-reset/
+    Sends a reset email when the address is registered; silently succeeds
+    when it is not (prevents email enumeration).
+    """
+
+    def setUp(self):
+        self.user = AppUser.objects.create_user(
+            username='resetuser', email='reset@example.com', password='oldpass123',
+        )
+        self.url = reverse('password_reset')
+
+    def test_registered_email_returns_200_and_sends_email(self):
+        response = self.client.post(self.url, {'email': 'reset@example.com'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('detail', response.data)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('reset@example.com', mail.outbox[0].to)
+
+    def test_email_contains_reset_link_with_uid_and_token(self):
+        self.client.post(self.url, {'email': 'reset@example.com'})
+        body = mail.outbox[0].body
+        self.assertIn('/reset-password', body)
+        self.assertIn('uid=', body)
+        self.assertIn('token=', body)
+
+    def test_unregistered_email_returns_200_and_sends_no_email(self):
+        response = self.client.post(self.url, {'email': 'nobody@example.com'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('detail', response.data)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_both_cases_return_identical_message(self):
+        r1 = self.client.post(self.url, {'email': 'reset@example.com'})
+        r2 = self.client.post(self.url, {'email': 'nobody@example.com'})
+        self.assertEqual(r1.data['detail'], r2.data['detail'])
+
+    def test_missing_email_returns_400(self):
+        response = self.client.post(self.url, {})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_invalid_email_format_returns_400(self):
+        response = self.client.post(self.url, {'email': 'not-an-email'})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class PasswordResetConfirmTests(APITestCase):
+    """
+    POST /api/auth/password-reset/confirm/
+    Sets a new password when uid + token are valid; rejects invalid/expired tokens.
+    """
+
+    def setUp(self):
+        self.user = AppUser.objects.create_user(
+            username='confirmuser', email='confirm@example.com', password='oldpass123',
+        )
+        self.url = reverse('password_reset_confirm')
+        self.uid = urlsafe_base64_encode(force_bytes(self.user.pk))
+        self.token = PasswordResetTokenGenerator().make_token(self.user)
+
+    def _post(self, **kwargs):
+        payload = {
+            'uid': self.uid,
+            'token': self.token,
+            'password': 'newpass456',
+            'password_confirm': 'newpass456',
+        }
+        payload.update(kwargs)
+        return self.client.post(self.url, payload)
+
+    def test_valid_token_resets_password(self):
+        response = self._post()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('newpass456'))
+
+    def test_can_login_with_new_password_after_reset(self):
+        self._post()
+        login_response = self.client.post(
+            reverse('token_obtain_pair'),
+            {'username': 'confirmuser', 'password': 'newpass456'},
+        )
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', login_response.data)
+
+    def test_old_password_rejected_after_reset(self):
+        self._post()
+        login_response = self.client.post(
+            reverse('token_obtain_pair'),
+            {'username': 'confirmuser', 'password': 'oldpass123'},
+        )
+        self.assertEqual(login_response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_token_invalidated_after_use(self):
+        self._post()
+        # Using the same token again should fail because the password hash changed
+        response = self._post(password='anotherpass789', password_confirm='anotherpass789')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_invalid_token_returns_400(self):
+        response = self._post(token='completely-wrong-token')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_invalid_uid_returns_400(self):
+        response = self._post(uid='invaliduid')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_nonexistent_user_uid_returns_400(self):
+        uid_for_nobody = urlsafe_base64_encode(force_bytes(99999))
+        response = self._post(uid=uid_for_nobody)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_passwords_do_not_match_returns_400(self):
+        response = self._post(password='newpass456', password_confirm='different789')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('oldpass123'))  # unchanged
+
+    def test_password_too_short_returns_400(self):
+        response = self._post(password='short', password_confirm='short')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('oldpass123'))  # unchanged
+
+    def test_missing_fields_returns_400(self):
+        response = self.client.post(self.url, {'uid': self.uid, 'token': self.token})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

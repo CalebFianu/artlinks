@@ -397,21 +397,28 @@ Users have no way to recover their account if they forget their password. This a
 
 ### Step 1 — Email configuration (`artlinks/settings.py`)
 
+Artlinks uses **Mailjet** (free tier: 6,000 emails/month) as the SMTP relay. No extra package needed — Django's built-in SMTP backend connects to Mailjet's servers using the API key pair as credentials.
+
 ```python
 import os
 
 EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_HOST = 'in-v3.mailjet.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get('MAILJET_API_KEY', '')       # Mailjet API Key
+EMAIL_HOST_PASSWORD = os.environ.get('MAILJET_SECRET_KEY', '') # Mailjet Secret Key
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@artlinks.app')
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 PASSWORD_RESET_TIMEOUT = 1800  # 30 minutes
 ```
 
-In dev, the console backend prints the reset link to the terminal — no SMTP credentials needed to test locally.
+In dev, `EMAIL_BACKEND` defaults to the console backend — the reset link is printed to the Django terminal with no SMTP credentials needed. Set `EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend` in the environment to send real emails via Mailjet.
+
+**Mailjet setup (one-time):**
+1. Create a free account at mailjet.com
+2. Go to Account Settings → API Keys → copy the API Key and Secret Key
+3. Add and verify your sender domain/address under Sender Domains & Addresses
 
 ### Step 2 — New serializers (`core/serializers.py`)
 
@@ -543,6 +550,10 @@ API docs available at `http://localhost:8000/api/docs/`.
 - [ ] Run `npm run build` in `frontend/` — output is `frontend/dist/`
 - [ ] Configure database via `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST` env vars (falls back to SQLite if unset)
 - [ ] Set up media file serving (`MEDIA_ROOT`) for profile pictures
+- [ ] Set `MAILJET_API_KEY` and `MAILJET_SECRET_KEY` env vars for password reset emails
+- [ ] Set `EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend` in production
+- [ ] Set `DEFAULT_FROM_EMAIL` to a verified Mailjet sender address
+- [ ] Set `FRONTEND_URL` to the production frontend URL (used in reset link)
 
 ### Deployment Options
 

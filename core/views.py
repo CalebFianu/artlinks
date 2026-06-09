@@ -1,9 +1,13 @@
 from collections import defaultdict
 from datetime import date
-from django.utils import timezone
-
+from django.conf import settings
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core import signing
+from django.core.mail import send_mail
 from django.db.models import Count, F, Q
+from django.utils import timezone
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from drf_spectacular.types import OpenApiTypes
 from rest_framework import status
@@ -35,6 +39,8 @@ from .serializers import (
     LinkCreateSerializer,
     LinkSerializer,
     LinkWithCollectionsSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     PublicCollectionSerializer,
     RegisterSerializer,
     SocialCompleteSerializer,
@@ -693,3 +699,79 @@ class CollectionViewSet(ModelViewSet):
         link = serializer.save(user=user)
         collection.links.add(link)
         return Response(CollectionSerializer(collection).data, status=status.HTTP_200_OK)
+
+
+class PasswordResetRequestView(APIView):
+    """
+    POST /api/auth/password-reset/
+    Sends a password reset email if the address is registered.
+    Always returns the same success message to prevent email enumeration.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+
+        try:
+            user = AppUser.objects.get(email=email)
+        except AppUser.DoesNotExist:
+            # Silently do nothing — don't reveal whether the email is registered
+            return Response({'detail': 'If that email is registered, a reset link has been sent.'})
+
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = PasswordResetTokenGenerator().make_token(user)
+        reset_url = f"{settings.FRONTEND_URL}/reset-password?uid={uid}&token={token}"
+
+        send_mail(
+            subject='Reset your Artlinks password',
+            message=(
+                f'Hi {user.username},\n\n'
+                f'Click the link below to reset your password. '
+                f'This link expires in 30 minutes.\n\n'
+                f'{reset_url}\n\n'
+                f'If you did not request a password reset, you can ignore this email.\n\n'
+                f'— The Artlinks team'
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+
+        return Response({'detail': 'If that email is registered, a reset link has been sent.'})
+
+
+class PasswordResetConfirmView(APIView):
+    """
+    POST /api/auth/password-reset/confirm/
+    Sets a new password using the uid + token from the reset email.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        uid = serializer.validated_data['uid']
+        token = serializer.validated_data['token']
+        password = serializer.validated_data['password']
+
+        try:
+            user_pk = force_str(urlsafe_base64_decode(uid))
+            user = AppUser.objects.get(pk=user_pk)
+        except (TypeError, ValueError, OverflowError, AppUser.DoesNotExist):
+            return Response(
+                {'detail': 'Invalid or expired reset link.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not PasswordResetTokenGenerator().check_token(user, token):
+            return Response(
+                {'detail': 'Invalid or expired reset link.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(password)
+        user.save()
+        return Response({'detail': 'Password has been reset successfully.'})

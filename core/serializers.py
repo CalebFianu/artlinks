@@ -199,6 +199,22 @@ class LinkWithCollectionsSerializer(serializers.ModelSerializer):
         return CollectionSerializer(qs, many=True).data
 
 
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True, min_length=8)
+    password_confirm = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        if data['password'] != data['password_confirm']:
+            raise serializers.ValidationError({'password_confirm': 'Passwords do not match.'})
+        return data
+
+
 class AdminUserSerializer(serializers.ModelSerializer):
     """Used by the admin dashboard — includes annotated link/collection counts."""
     link_count = serializers.IntegerField(read_only=True)

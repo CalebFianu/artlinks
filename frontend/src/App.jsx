@@ -9,12 +9,18 @@ import DailyPage from './pages/DailyPage';
 import PublicProfilePage from './pages/PublicProfilePage';
 import AccountPage from './pages/AccountPage';
 import AdminPage from './pages/AdminPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 export default function App() {
   return (
     <Routes>
       {/* Landing — redirects to /dashboard if already logged in */}
       <Route path="/" element={<LandingPage />} />
+
+      {/* Auth — password reset (public) */}
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       {/* Protected app routes */}
       <Route element={<PrivateRoute />}>

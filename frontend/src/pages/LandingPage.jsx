@@ -671,6 +671,11 @@ export default function LandingPage() {
               </button>
             </form>
 
+            <p className="al-footnote" style={{ marginTop: 12 }}>
+              <button className="al-switch-link" style={{ fontWeight: 400, color: 'var(--ink-mute)', textDecoration: 'none' }} onClick={() => { setModal(null); navigate('/forgot-password'); }}>
+                Forgot password?
+              </button>
+            </p>
             <p className="al-footnote">
               Don't have an account?{' '}
               <button className="al-switch-link" onClick={() => setModal('signup')}>Sign up →</button>

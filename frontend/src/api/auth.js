@@ -32,6 +32,17 @@ export const refreshToken = (refresh) =>
 //     username,
 //   });
 
+export const requestPasswordReset = (email) =>
+  axios.post(`${BASE}/auth/password-reset/`, { email });
+
+export const confirmPasswordReset = (uid, token, password, passwordConfirm) =>
+  axios.post(`${BASE}/auth/password-reset/confirm/`, {
+    uid,
+    token,
+    password,
+    password_confirm: passwordConfirm,
+  });
+
 export const searchUsers = (q) =>
   axios.get(`${BASE}/users/search?q=${encodeURIComponent(q)}`);
 
