@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { path: '/collections', label: 'Collections', icon: I.folder },
   { path: '/featured', label: 'Featured', icon: I.star },
   { path: '/daily', label: 'Daily', icon: I.book },
+  { path: '/socials', label: 'Socials', icon: I.globe },
 ];
 
 export default function Sidebar({ isOpen, onClose }) {

@@ -9,12 +9,14 @@ from .views import (
     CollectionViewSet,
     LinkViewSet,
     PlatformStatsView,
+    SocialLinkViewSet,
 )
 
 router = DefaultRouter()
 router.register('users', AppUserViewSet, basename='appuser')
 router.register('links', LinkViewSet, basename='link')
 router.register('collections', CollectionViewSet, basename='collection')
+router.register('social-links', SocialLinkViewSet, basename='sociallink')
 
 urlpatterns = router.urls + [
     path('platform-stats/', PlatformStatsView.as_view(), name='platform-stats'),

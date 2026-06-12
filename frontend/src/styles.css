@@ -623,6 +623,12 @@ body[data-variant="studio"] .profile-link { box-shadow: none; background: var(--
 body[data-variant="studio"] .profile-link:hover { transform: none; background: var(--paper-2); box-shadow: none; }
 body[data-variant="studio"] .profile-link.feature { background: var(--accent-soft); }
 
+.social-icon-link:hover {
+  border-color: var(--ink) !important;
+  background: var(--accent-soft);
+  color: var(--accent-ink) !important;
+}
+
 /* ============ SECTION HEADER ============ */
 .section-hd {
   display: flex;

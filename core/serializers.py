@@ -2,8 +2,8 @@ import re
 
 from rest_framework import serializers
 
-from .models import AppUser, Collection, Link
-from .validators import check_offensive_content
+from .models import AppUser, Collection, Link, SocialLink
+from .validators import check_offensive_content, validate_social_url
 
 
 class PrefixedURLField(serializers.URLField):
@@ -14,6 +14,14 @@ class PrefixedURLField(serializers.URLField):
 
 _USERNAME_RE = re.compile(r'^[a-z0-9-]+$')
 
+RESERVED_USERNAMES = {
+    'admin', 'api', 'login', 'logout', 'signup', 'register',
+    'dashboard', 'collections', 'featured', 'daily', 'socials',
+    'account', 'settings', 'forgot-password', 'reset-password',
+    'help', 'support', 'about', 'terms', 'privacy',
+    'static', 'media', 'assets',
+}
+
 
 def _validate_username_format(value: str) -> str:
     if not _USERNAME_RE.match(value):
@@ -22,6 +30,8 @@ def _validate_username_format(value: str) -> str:
         )
     if len(value) < 3:
         raise serializers.ValidationError('Username must be at least 3 characters.')
+    if value in RESERVED_USERNAMES:
+        raise serializers.ValidationError('This username is reserved.')
     return value
 
 
@@ -212,6 +222,21 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     def validate(self, data):
         if data['password'] != data['password_confirm']:
             raise serializers.ValidationError({'password_confirm': 'Passwords do not match.'})
+        return data
+
+
+class SocialLinkSerializer(serializers.ModelSerializer):
+    url = PrefixedURLField()
+
+    class Meta:
+        model = SocialLink
+        fields = ['id', 'platform', 'url']
+
+    def validate(self, data):
+        platform = data.get('platform', getattr(self.instance, 'platform', None))
+        url = data.get('url', getattr(self.instance, 'url', None))
+        if platform and url:
+            validate_social_url(platform, url)
         return data
 
 

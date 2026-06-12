@@ -7,17 +7,18 @@ import { getUserProfile } from '../api/collections';
 import { isFeatured, isPublicCollection, linkDate, fmt, fmtMonth, collectionEmoji, todayStr } from '../utils/models';
 
 const SOCIAL_DEFS = [
-  { key: 'instagram', label: 'Instagram', icon: I.insta },
-  { key: 'twitter', label: 'X / Twitter', icon: I.x_social },
-  { key: 'youtube', label: 'YouTube', icon: I.youtube },
-  { key: 'twitch', label: 'Twitch', icon: I.twitch },
-  { key: 'tiktok', label: 'TikTok', icon: I.tiktok },
-  { key: 'linkedin', label: 'LinkedIn', icon: I.linkedin },
-  { key: 'spotify', label: 'Spotify', icon: I.spotify },
-  { key: 'soundcloud', label: 'SoundCloud', icon: I.soundcloud },
-  { key: 'pinterest', label: 'Pinterest', icon: I.pinterest },
-  { key: 'website', label: 'Website', icon: I.globe },
-  { key: 'email', label: 'Email', icon: I.mail },
+  { key: 'twitter',   label: 'X / Twitter', icon: I.x_social },
+  { key: 'facebook',  label: 'Facebook',    icon: I.facebook },
+  { key: 'instagram', label: 'Instagram',   icon: I.insta },
+  { key: 'youtube',   label: 'YouTube',     icon: I.youtube },
+  { key: 'pinterest', label: 'Pinterest',   icon: I.pinterest },
+  { key: 'substack',  label: 'Substack',    icon: I.substack },
+  { key: 'twitch',    label: 'Twitch',      icon: I.twitch },
+  { key: 'linkedin',  label: 'LinkedIn',    icon: I.linkedin },
+  { key: 'tiktok',    label: 'TikTok',      icon: I.tiktok },
+  { key: 'reddit',    label: 'Reddit',      icon: I.reddit },
+  { key: 'discord',   label: 'Discord',     icon: I.discord },
+  { key: 'whatsapp',  label: 'WhatsApp',    icon: I.whatsapp },
 ];
 
 export default function PublicProfilePage() {
@@ -31,6 +32,7 @@ export default function PublicProfilePage() {
   const [publicCollections, setPublicCollections] = useState([]);
   const [profilePicture, setProfilePicture] = useState(null);
   const [bio, setBio] = useState('');
+  const [socialLinks, setSocialLinks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [accountDisabled, setAccountDisabled] = useState(false);
@@ -47,6 +49,7 @@ export default function PublicProfilePage() {
         setPublicCollections(data.public_collections || []);
         setProfilePicture(data.profile_picture || null);
         setBio(data.bio || '');
+        setSocialLinks(data.social_links || []);
       })
       .catch((e) => {
         if (e.response?.status === 404) {
@@ -264,6 +267,33 @@ export default function PublicProfilePage() {
               ) : null
             )}
           </>
+        )}
+
+        {socialLinks.length > 0 && (
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 32 }}>
+            {SOCIAL_DEFS.filter((s) => socialLinks.some((sl) => sl.platform === s.key)).map((s) => {
+              const sl = socialLinks.find((sl) => sl.platform === s.key);
+              return (
+                <a
+                  key={s.key}
+                  href={sl.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={s.label}
+                  className="social-icon-link"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: 42, height: 42, borderRadius: '50%',
+                    border: '1.4px solid var(--ink-mute)',
+                    color: 'var(--ink)',
+                    transition: 'border-color 0.15s, color 0.15s, background 0.15s',
+                  }}
+                >
+                  <s.icon size={18} />
+                </a>
+              );
+            })}
+          </div>
         )}
 
         <div style={{ marginTop: 40, fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--ink-mute)' }}>

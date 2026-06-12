@@ -55,3 +55,29 @@ class Collection(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class SocialLink(models.Model):
+    class Platform(models.TextChoices):
+        TWITTER = 'twitter', 'Twitter'
+        FACEBOOK = 'facebook', 'Facebook'
+        INSTAGRAM = 'instagram', 'Instagram'
+        YOUTUBE = 'youtube', 'YouTube'
+        PINTEREST = 'pinterest', 'Pinterest'
+        SUBSTACK = 'substack', 'Substack'
+        TWITCH = 'twitch', 'Twitch'
+        LINKEDIN = 'linkedin', 'LinkedIn'
+        TIKTOK = 'tiktok', 'TikTok'
+        REDDIT = 'reddit', 'Reddit'
+        DISCORD = 'discord', 'Discord'
+        WHATSAPP = 'whatsapp', 'WhatsApp'
+
+    user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name='social_links')
+    platform = models.CharField(max_length=20, choices=Platform.choices)
+    url = models.URLField()
+
+    class Meta:
+        unique_together = ('user', 'platform')
+
+    def __str__(self):
+        return f'{self.user.username} — {self.platform}'

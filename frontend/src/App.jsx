@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage';
 import CollectionsPage from './pages/CollectionsPage';
 import FeaturedPage from './pages/FeaturedPage';
 import DailyPage from './pages/DailyPage';
+import SocialsPage from './pages/SocialsPage';
 import PublicProfilePage from './pages/PublicProfilePage';
 import AccountPage from './pages/AccountPage';
 import AdminPage from './pages/AdminPage';
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/collections" element={<CollectionsPage />} />
         <Route path="/featured" element={<FeaturedPage />} />
         <Route path="/daily" element={<DailyPage />} />
+        <Route path="/socials" element={<SocialsPage />} />
         <Route path="/account" element={<AccountPage />} />
       </Route>
 

@@ -22,7 +22,7 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .models import AppUser, Collection, Link
+from .models import AppUser, Collection, Link, SocialLink
 from .validators import check_offensive_content
 from .permissions import (
     AppUserPermission,
@@ -32,6 +32,7 @@ from .permissions import (
     UserScopedReadPermission,
 )
 from .serializers import (
+    RESERVED_USERNAMES,
     AdminUserSerializer,
     AppUserSerializer,
     CollectionSerializer,
@@ -44,6 +45,7 @@ from .serializers import (
     PublicCollectionSerializer,
     RegisterSerializer,
     SocialCompleteSerializer,
+    SocialLinkSerializer,
     UpdateProfileSerializer,
 )
 from .social_auth import verify_google_token, verify_microsoft_token
@@ -123,6 +125,8 @@ class UsernameCheckView(APIView):
             return Response({'available': False, 'error': 'Too short (min 3 characters).'})
         if profanity.contains_profanity(username):
             return Response({'available': False, 'error': 'Username contains inappropriate content.'})
+        if username in RESERVED_USERNAMES:
+            return Response({'available': False, 'error': 'This username is reserved.'})
         available = not AppUser.objects.filter(username=username).exists()
         return Response({'available': available, 'username': username})
 
@@ -360,11 +364,13 @@ class AppUserViewSet(ModelViewSet):
         public_cols = Collection.objects.filter(
             user=target_user, category=Collection.Category.PUBLIC,
         ).filter(links__isnull=False).distinct().order_by('id')
+        social_links = SocialLink.objects.filter(user=target_user)
         return Response({
             'profile_picture': target_user.profile_picture,
             'bio': target_user.bio,
             'featured_links': LinkSerializer(featured, many=True).data,
             'public_collections': PublicCollectionSerializer(public_cols, many=True).data,
+            'social_links': SocialLinkSerializer(social_links, many=True).data,
         })
 
     @extend_schema(parameters=[_USERNAME_PARAM])
@@ -512,6 +518,21 @@ class AppUserViewSet(ModelViewSet):
             )
         qs = Link.objects.filter(user=target_user, link_day__date=parsed).order_by('link_day')
         return Response(LinkSerializer(qs, many=True).data)
+
+
+class SocialLinkViewSet(ModelViewSet):
+    serializer_class = SocialLinkSerializer
+    permission_classes = [LinkPermission]
+
+    def get_queryset(self):
+        return SocialLink.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        platform = serializer.validated_data['platform']
+        if SocialLink.objects.filter(user=user, platform=platform).exists():
+            raise DRFValidationError({'platform': 'You already have a link for this platform.'})
+        serializer.save(user=user)
 
 
 class PlatformStatsView(APIView):

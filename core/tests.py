@@ -10,7 +10,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import AppUser, Collection, Link
+from .models import AppUser, Collection, Link, SocialLink
 
 
 # ---------------------------------------------------------------------------
@@ -2296,3 +2296,280 @@ class PasswordResetConfirmTests(APITestCase):
     def test_missing_fields_returns_400(self):
         response = self.client.post(self.url, {'uid': self.uid, 'token': self.token})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# ---------------------------------------------------------------------------
+# SocialLinkViewSet — CRUD /api/social-links/
+# ---------------------------------------------------------------------------
+
+class SocialLinkViewSetTests(APITestCase):
+    def setUp(self):
+        self.user = AppUser.objects.create_user(
+            username='creator', password='pass', role=AppUser.Role.CREATOR,
+        )
+        self.other = AppUser.objects.create_user(
+            username='other', password='pass', role=AppUser.Role.CREATOR,
+        )
+
+    def _auth(self, user):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(user)}')
+
+    def _list_url(self):
+        return reverse('sociallink-list')
+
+    def _detail_url(self, pk):
+        return reverse('sociallink-detail', args=[pk])
+
+    def test_create_social_link(self):
+        self._auth(self.user)
+        response = self.client.post(self._list_url(), {
+            'platform': 'twitter',
+            'url': 'https://x.com/testuser',
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['platform'], 'twitter')
+        self.assertEqual(response.data['url'], 'https://x.com/testuser')
+
+    def test_create_rejects_wrong_domain(self):
+        self._auth(self.user)
+        response = self.client.post(self._list_url(), {
+            'platform': 'twitter',
+            'url': 'https://instagram.com/testuser',
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_rejects_duplicate_platform(self):
+        self._auth(self.user)
+        SocialLink.objects.create(user=self.user, platform='twitter', url='https://x.com/old')
+        response = self.client.post(self._list_url(), {
+            'platform': 'twitter',
+            'url': 'https://x.com/new',
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_list_returns_only_own_links(self):
+        SocialLink.objects.create(user=self.user, platform='twitter', url='https://x.com/me')
+        SocialLink.objects.create(user=self.other, platform='twitter', url='https://x.com/other')
+        self._auth(self.user)
+        response = self.client.get(self._list_url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['platform'], 'twitter')
+
+    def test_update_social_link(self):
+        self._auth(self.user)
+        sl = SocialLink.objects.create(user=self.user, platform='twitter', url='https://x.com/old')
+        response = self.client.put(self._detail_url(sl.id), {
+            'platform': 'twitter',
+            'url': 'https://x.com/new',
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        sl.refresh_from_db()
+        self.assertEqual(sl.url, 'https://x.com/new')
+
+    def test_delete_social_link(self):
+        self._auth(self.user)
+        sl = SocialLink.objects.create(user=self.user, platform='twitter', url='https://x.com/me')
+        response = self.client.delete(self._detail_url(sl.id))
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(SocialLink.objects.filter(pk=sl.id).exists())
+
+    def test_cannot_access_others_link(self):
+        sl = SocialLink.objects.create(user=self.other, platform='twitter', url='https://x.com/other')
+        self._auth(self.user)
+        response = self.client.get(self._detail_url(sl.id))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_unauthenticated_returns_401(self):
+        self.client.credentials()  # clear auth
+        response = self.client.get(self._list_url())
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ---------------------------------------------------------------------------
+# Social URL validation — per-platform domain checks
+# ---------------------------------------------------------------------------
+
+class SocialURLValidationTests(APITestCase):
+    def setUp(self):
+        self.user = AppUser.objects.create_user(
+            username='creator', password='pass', role=AppUser.Role.CREATOR,
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(self.user)}')
+        self.url = reverse('sociallink-list')
+
+    def _post(self, platform, link_url):
+        return self.client.post(self.url, {'platform': platform, 'url': link_url})
+
+    def test_twitter_accepts_x_com(self):
+        r = self._post('twitter', 'https://x.com/handle')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_twitter_accepts_twitter_com(self):
+        r = self._post('twitter', 'https://twitter.com/handle')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_twitter_rejects_facebook(self):
+        r = self._post('twitter', 'https://facebook.com/handle')
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_facebook_accepts_facebook_com(self):
+        r = self._post('facebook', 'https://facebook.com/profile')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_instagram_accepts_instagram_com(self):
+        r = self._post('instagram', 'https://instagram.com/user')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_instagram_rejects_tiktok(self):
+        r = self._post('instagram', 'https://tiktok.com/user')
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_youtube_accepts_youtube_com(self):
+        r = self._post('youtube', 'https://youtube.com/@channel')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_youtube_accepts_youtu_be(self):
+        r = self._post('youtube', 'https://youtu.be/abc123')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_substack_accepts_subdomain(self):
+        r = self._post('substack', 'https://myname.substack.com')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_substack_rejects_random_domain(self):
+        r = self._post('substack', 'https://example.com/blog')
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_twitch_accepts_twitch_tv(self):
+        r = self._post('twitch', 'https://twitch.tv/streamer')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_linkedin_accepts_linkedin_com(self):
+        r = self._post('linkedin', 'https://linkedin.com/in/user')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_tiktok_accepts_tiktok_com(self):
+        r = self._post('tiktok', 'https://tiktok.com/@user')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_reddit_accepts_reddit_com(self):
+        r = self._post('reddit', 'https://reddit.com/u/user')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_discord_accepts_discord_gg(self):
+        r = self._post('discord', 'https://discord.gg/invite')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_discord_accepts_discord_com(self):
+        r = self._post('discord', 'https://discord.com/invite/abc')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_whatsapp_accepts_wa_me(self):
+        r = self._post('whatsapp', 'https://wa.me/1234567890')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_whatsapp_accepts_chat_whatsapp(self):
+        r = self._post('whatsapp', 'https://chat.whatsapp.com/group')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_pinterest_accepts_pinterest_com(self):
+        r = self._post('pinterest', 'https://pinterest.com/user')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+
+    def test_url_without_scheme_gets_prefixed(self):
+        r = self._post('twitter', 'x.com/handle')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(r.data['url'].startswith('https://'))
+
+
+# ---------------------------------------------------------------------------
+# Profile endpoint includes social_links
+# ---------------------------------------------------------------------------
+
+class ProfileSocialLinksTests(APITestCase):
+    def setUp(self):
+        self.user = AppUser.objects.create_user(
+            username='creator', password='pass', role=AppUser.Role.CREATOR,
+        )
+        SocialLink.objects.create(user=self.user, platform='twitter', url='https://x.com/me')
+        SocialLink.objects.create(user=self.user, platform='instagram', url='https://instagram.com/me')
+
+    def _url(self, username):
+        return reverse('appuser-profile') + f'?username={username}'
+
+    def test_profile_includes_social_links(self):
+        response = self.client.get(self._url('creator'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('social_links', response.data)
+        self.assertEqual(len(response.data['social_links']), 2)
+
+    def test_profile_social_links_have_expected_fields(self):
+        response = self.client.get(self._url('creator'))
+        link = response.data['social_links'][0]
+        self.assertIn('id', link)
+        self.assertIn('platform', link)
+        self.assertIn('url', link)
+
+    def test_profile_with_no_social_links_returns_empty_list(self):
+        other = AppUser.objects.create_user(
+            username='empty', password='pass', role=AppUser.Role.CREATOR,
+        )
+        response = self.client.get(self._url('empty'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['social_links'], [])
+
+
+# ---------------------------------------------------------------------------
+# Reserved username validation
+# ---------------------------------------------------------------------------
+
+class ReservedUsernameTests(APITestCase):
+    def _register_url(self):
+        return reverse('register')
+
+    def _check_url(self, username):
+        return reverse('username_check') + f'?username={username}'
+
+    def _payload(self, username):
+        return {
+            'email': f'{username}@example.com',
+            'username': username,
+            'password': 'strongpass1',
+            'password_confirm': 'strongpass1',
+        }
+
+    def test_register_rejects_reserved_username_admin(self):
+        response = self.client.post(self._register_url(), self._payload('admin'))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_register_rejects_reserved_username_dashboard(self):
+        response = self.client.post(self._register_url(), self._payload('dashboard'))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_register_rejects_reserved_username_api(self):
+        response = self.client.post(self._register_url(), self._payload('api'))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_register_rejects_reserved_username_login(self):
+        response = self.client.post(self._register_url(), self._payload('login'))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_register_rejects_reserved_username_socials(self):
+        response = self.client.post(self._register_url(), self._payload('socials'))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_register_allows_non_reserved_username(self):
+        response = self.client.post(self._register_url(), self._payload('coolartist'))
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_username_check_returns_unavailable_for_reserved(self):
+        response = self.client.get(self._check_url('admin'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data['available'])
+        self.assertIn('reserved', response.data['error'].lower())
+
+    def test_username_check_returns_available_for_valid(self):
+        response = self.client.get(self._check_url('coolartist'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['available'])
