@@ -275,9 +275,7 @@ export default function CollectionsPage() {
             {recentLinks.slice(0, 5).map((l) => (
               <LinkRow
                 key={l.id} link={l} collections={collections}
-                onEdit={() => setEditingLink(l)}
-                onToggleFeatured={() => handleToggleFeatured(l.id)}
-                onDelete={() => handleDelete(l.id)}
+                readOnly
               />
             ))}
           </div>

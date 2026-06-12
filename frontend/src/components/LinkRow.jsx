@@ -1,7 +1,7 @@
 import { I, cls } from './Icons';
 import { isFeatured, linkCollection, linkDate, fmt, collectionEmoji } from '../utils/models';
 
-export default function LinkRow({ link, collections, onEdit, onToggleFeatured, onDelete, dragHandleProps }) {
+export default function LinkRow({ link, collections, onEdit, onToggleFeatured, onDelete, dragHandleProps, readOnly }) {
   const col = linkCollection(link, collections);
   const dateStr = linkDate(link);
   const featured = isFeatured(link);
@@ -35,21 +35,23 @@ export default function LinkRow({ link, collections, onEdit, onToggleFeatured, o
       <div className="link-row-col-date mono text-soft" style={{ fontSize: 12 }}>
         {dateStr ? fmt(dateStr) : '—'}
       </div>
-      <div className="row" style={{ gap: 2, justifyContent: 'flex-end' }}>
-        <button
-          className={cls('icon-btn', featured && 'active')}
-          onClick={onToggleFeatured}
-          title="Toggle featured"
-        >
-          <I.star size={16} stroke={featured ? 2 : 1.4} />
-        </button>
-        <button className="icon-btn" onClick={onEdit} title="Edit">
-          <I.edit size={15} />
-        </button>
-        <button className="icon-btn" onClick={onDelete} title="Delete">
-          <I.trash size={15} />
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="row" style={{ gap: 2, justifyContent: 'flex-end' }}>
+          <button
+            className={cls('icon-btn', featured && 'active')}
+            onClick={onToggleFeatured}
+            title="Toggle featured"
+          >
+            <I.star size={16} stroke={featured ? 2 : 1.4} />
+          </button>
+          <button className="icon-btn" onClick={onEdit} title="Edit">
+            <I.edit size={15} />
+          </button>
+          <button className="icon-btn" onClick={onDelete} title="Delete">
+            <I.trash size={15} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
