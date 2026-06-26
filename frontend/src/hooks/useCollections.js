@@ -8,28 +8,43 @@ import {
 
 export function useCollections() {
   const [collections, setCollections] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrev, setHasPrev] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const refetch = useCallback(async () => {
     try {
       setLoading(true);
-      const { data } = await getCollections();
-      setCollections(data);
+      const { data } = await getCollections(page);
+      setCollections(data.results);
+      setTotalCount(data.count);
+      setHasNext(!!data.next);
+      setHasPrev(!!data.previous);
     } catch (e) {
       setError(e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     refetch();
   }, [refetch]);
 
+  const nextPage = () => setPage((p) => p + 1);
+  const prevPage = () => setPage((p) => p - 1);
+
   const addCollection = async (payload) => {
     const { data: created } = await createCollection(payload);
-    setCollections((prev) => [...prev, created]);
+    // Go to last page or refetch so the new collection is visible
+    if (page !== 1) {
+      setPage(1);
+    } else {
+      await refetch();
+    }
     return created;
   };
 
@@ -41,7 +56,14 @@ export function useCollections() {
 
   const deleteCollection = async (id) => {
     await deleteCollectionApi(id);
-    setCollections((prev) => prev.filter((c) => c.id !== id));
+    // If we just deleted the last item on a non-first page, step back
+    const remaining = collections.length - 1;
+    if (remaining === 0 && page > 1) {
+      setPage((p) => p - 1); // triggers refetch via useEffect
+    } else {
+      setCollections((prev) => prev.filter((c) => c.id !== id));
+      setTotalCount((c) => c - 1);
+    }
   };
 
   // Toggle public/private
@@ -57,5 +79,9 @@ export function useCollections() {
     });
   };
 
-  return { collections, loading, error, addCollection, updateCollection, deleteCollection, togglePublic, refetch };
+  return {
+    collections, loading, error,
+    page, nextPage, prevPage, totalCount, hasNext, hasPrev,
+    addCollection, updateCollection, deleteCollection, togglePublic, refetch,
+  };
 }

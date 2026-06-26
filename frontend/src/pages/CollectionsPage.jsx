@@ -6,6 +6,7 @@ import LinkRow from '../components/LinkRow';
 import LinkModal from '../components/LinkModal';
 import NewCollectionModal from '../components/NewCollectionModal';
 import Toast from '../components/Toast';
+import Pagination from '../components/Pagination';
 import { useLinks } from '../hooks/useLinks';
 import { useCollections } from '../hooks/useCollections';
 import { useToast } from '../hooks/useToast';
@@ -18,7 +19,10 @@ export default function CollectionsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { links, addLink, updateLink, deleteLink, toggleFeatured } = useLinks(user?.username);
-  const { collections, loading, addCollection, updateCollection, refetch: refetchCollections } = useCollections();
+  const {
+    collections, loading, addCollection, updateCollection, refetch: refetchCollections,
+    page, nextPage, prevPage, totalCount, hasNext, hasPrev,
+  } = useCollections();
   const { toast, showToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedColId, setSelectedColId] = useState(null);
@@ -266,6 +270,14 @@ export default function CollectionsPage() {
               </div>
             </div>
           )}
+          <Pagination
+            page={page}
+            totalCount={totalCount}
+            hasNext={hasNext}
+            hasPrev={hasPrev}
+            onNext={nextPage}
+            onPrev={prevPage}
+          />
 
           <div className="section-hd mt-lg">
             <h2>Recently grouped</h2>

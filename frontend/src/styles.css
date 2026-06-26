@@ -1519,3 +1519,20 @@ body[data-variant="studio"] .account-section { box-shadow: none; }
   .account-wrap { padding: 72px 16px 80px; }
   .danger-card { flex-direction: column; align-items: flex-start; }
 }
+
+/* ── Pagination ── */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1.2px dashed var(--ink-mute);
+}
+
+.pagination .btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}

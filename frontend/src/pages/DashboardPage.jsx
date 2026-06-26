@@ -8,6 +8,7 @@ import SortableLinkRow from '../components/SortableLinkRow';
 import LinkModal from '../components/LinkModal';
 import NewCollectionModal from '../components/NewCollectionModal';
 import Toast from '../components/Toast';
+import Pagination from '../components/Pagination';
 import { useLinks } from '../hooks/useLinks';
 import { useCollections } from '../hooks/useCollections';
 import { useToast } from '../hooks/useToast';
@@ -20,7 +21,11 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTweaks();
   const navigate = useNavigate();
-  const { links, loading, addLink, updateLink, deleteLink, toggleFeatured, reorderLinks } = useLinks(user?.username);
+  const {
+    links, loading,
+    page, nextPage, prevPage, totalCount, hasNext, hasPrev,
+    addLink, updateLink, deleteLink, toggleFeatured, reorderLinks,
+  } = useLinks(user?.username);
   const { collections, addCollection } = useCollections();
   const { toast, showToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -37,7 +42,8 @@ export default function DashboardPage() {
   }, [user?.username]);
 
   const today = todayStr();
-  const featuredCount = links.filter(isFeatured).length;
+  // Use stats endpoint for totals that span all pages
+  const featuredCount = stats?.featured_links ?? links.filter(isFeatured).length;
   const addedToday = links.filter((l) => linkDate(l) === today).length;
 
   const filtered = links.filter((l) => {
@@ -164,7 +170,7 @@ export default function DashboardPage() {
           <section className="stats-bar">
             <div className="stat-cell">
               <div className="label">Total links</div>
-              <div className="value">{String(links.length).padStart(3, '0')}</div>
+              <div className="value">{String(totalCount).padStart(3, '0')}</div>
               <Doodles.Sparkle className="doodle accent" style={{ right: 14, top: 14 }} />
             </div>
             <div className="stat-cell">
@@ -196,14 +202,14 @@ export default function DashboardPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={`search ${links.length} links by title or url…`}
+                placeholder={`search ${totalCount} links by title or url…`}
               />
             </div>
           </div>
 
           <div className="filter-row" style={{ marginBottom: 14 }}>
             <button className={cls('chip', collectionFilter === 'all' && 'on')} onClick={() => setCollectionFilter('all')}>
-              all · {links.length}
+              all · {totalCount}
             </button>
             <button className={cls('chip', collectionFilter === '_featured' && 'on')} onClick={() => setCollectionFilter('_featured')}>
               ★ featured · {featuredCount}
@@ -248,6 +254,14 @@ export default function DashboardPage() {
               </DndContext>
             </div>
           )}
+          <Pagination
+            page={page}
+            totalCount={totalCount}
+            hasNext={hasNext}
+            hasPrev={hasPrev}
+            onNext={nextPage}
+            onPrev={prevPage}
+          />
         </main>
 
         {/* Mobile bottom tab nav */}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
@@ -12,7 +12,8 @@ import { useLinks } from '../hooks/useLinks';
 import { useCollections } from '../hooks/useCollections';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../context/AuthContext';
-import { isFeatured, linkCollection, collectionEmoji } from '../utils/models';
+import { linkCollection, collectionEmoji } from '../utils/models';
+import { getUserFeaturedLinks } from '../api/links';
 
 const SLOTS = 8;
 
@@ -27,7 +28,23 @@ export default function FeaturedPage() {
   const [showPicker, setShowPicker] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
 
-  const featured = links.filter(isFeatured);
+  // Load featured links directly so they're always complete regardless of the
+  // current page in useLinks (max 8 featured, always fits in one page).
+  const [featuredLinks, setFeaturedLinks] = useState([]);
+
+  const refreshFeatured = async () => {
+    if (!user?.username) return;
+    try {
+      const { data } = await getUserFeaturedLinks(user.username);
+      setFeaturedLinks(data.results);
+    } catch {
+      // silently fail; featuredLinks stays as-is
+    }
+  };
+
+  useEffect(() => {
+    refreshFeatured();
+  }, [user?.username]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -36,19 +53,23 @@ export default function FeaturedPage() {
 
   const handleDragEnd = async ({ active, over }) => {
     if (!over || active.id === over.id) return;
-    const oldIndex = featured.findIndex((l) => l.id === active.id);
-    const newIndex = featured.findIndex((l) => l.id === over.id);
-    const reordered = arrayMove(featured, oldIndex, newIndex);
+    const oldIndex = featuredLinks.findIndex((l) => l.id === active.id);
+    const newIndex = featuredLinks.findIndex((l) => l.id === over.id);
+    const reordered = arrayMove(featuredLinks, oldIndex, newIndex);
+    // Optimistic update
+    setFeaturedLinks(reordered);
     try {
       await reorderLinks(reordered.map((l) => l.id));
     } catch {
       showToast('Failed to save order.');
+      await refreshFeatured();
     }
   };
 
   const handleToggleFeatured = async (id) => {
     try {
       await toggleFeatured(id);
+      await refreshFeatured();
     } catch (e) {
       showToast(e.response?.data?.category?.[0] || 'Could not update.');
     }
@@ -59,6 +80,7 @@ export default function FeaturedPage() {
       await addLink(payload);
       setShowAdd(false);
       showToast('Link added ✓');
+      await refreshFeatured();
     } catch (e) {
       showToast(e.response?.data?.category?.[0] || 'Failed to add link.');
     }
@@ -69,6 +91,7 @@ export default function FeaturedPage() {
       await updateLink(editingLink.id, payload);
       setEditingLink(null);
       showToast('Saved ✓');
+      await refreshFeatured();
     } catch {
       showToast('Failed to save.');
     }
@@ -79,6 +102,7 @@ export default function FeaturedPage() {
       await deleteLink(id);
       setEditingLink(null);
       showToast('Deleted');
+      await refreshFeatured();
     } catch {
       showToast('Failed to delete.');
     }
@@ -118,15 +142,15 @@ export default function FeaturedPage() {
           <div className="featured-stage">
             <div>
               <div className="section-hd" style={{ marginTop: 0 }}>
-                <h2>Stage · {featured.length}/{SLOTS}</h2>
+                <h2>Stage · {featuredLinks.length}/{SLOTS}</h2>
                 <div className="muted">tap star to add/remove</div>
               </div>
 
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={featured.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+                <SortableContext items={featuredLinks.map((l) => l.id)} strategy={verticalListSortingStrategy}>
                   <div className="featured-slots">
                     {Array.from({ length: SLOTS }).map((_, i) => {
-                      const link = featured[i];
+                      const link = featuredLinks[i];
                       if (!link) {
                         return (
                           <div
@@ -161,7 +185,7 @@ export default function FeaturedPage() {
             </div>
 
             <div className="preview-phone">
-              <ProfileMini links={links} user={user} />
+              <ProfileMini featuredLinks={featuredLinks} user={user} />
             </div>
           </div>
         </main>
@@ -247,8 +271,7 @@ function SortableFeaturedSlot({ link, index, col, emoji, onEdit, onUnfeature }) 
   );
 }
 
-function ProfileMini({ links, user }) {
-  const featured = links.filter(isFeatured);
+function ProfileMini({ featuredLinks, user }) {
   const initial = user?.username?.[0]?.toUpperCase() || 'A';
   return (
     <div style={{ textAlign: 'center' }}>
@@ -258,7 +281,7 @@ function ProfileMini({ links, user }) {
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, lineHeight: 1 }}>{user?.username || 'you'}</div>
       <div className="mono text-mute" style={{ fontSize: 10, margin: '4px 0 10px' }}>@{user?.username}</div>
       <div className="col" style={{ gap: 8 }}>
-        {featured.map((l, i) => (
+        {featuredLinks.map((l, i) => (
           <div key={l.id} style={{
             padding: '10px 12px',
             border: 'var(--stroke) solid var(--ink)',

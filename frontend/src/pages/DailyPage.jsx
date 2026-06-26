@@ -15,7 +15,7 @@ import { todayStr, fmt, fmtMonth, linkDate } from '../utils/models';
 export default function DailyPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { links: allLinks, addLink, updateLink, deleteLink, toggleFeatured } = useLinks(user?.username);
+  const { links: allLinks, totalCount: totalLinks, addLink, updateLink, deleteLink, toggleFeatured } = useLinks(user?.username);
   const { collections } = useCollections();
   const { toast, showToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -35,9 +35,33 @@ export default function DailyPage() {
 
   useEffect(() => {
     if (!user?.username) return;
-    getUserLinksByMonth(user.username, viewMonth + 1, viewYear)
-      .then(({ data }) => setMonthData(data))
-      .catch(() => {});
+    let cancelled = false;
+
+    async function fetchAllMonthLinks() {
+      // links_by_month is now a paginated flat list; fetch all pages then
+      // reconstruct the {date: links[]} dict needed for the calendar view.
+      let allLinks = [];
+      let pg = 1;
+      while (true) {
+        const { data } = await getUserLinksByMonth(user.username, viewMonth + 1, viewYear, pg);
+        allLinks = [...allLinks, ...data.results];
+        if (!data.next || cancelled) break;
+        pg++;
+      }
+      if (!cancelled) {
+        const grouped = {};
+        for (const link of allLinks) {
+          // link_day is an ISO datetime string; take the date portion
+          const d = link.link_day.slice(0, 10);
+          if (!grouped[d]) grouped[d] = [];
+          grouped[d].push(link);
+        }
+        setMonthData(grouped);
+      }
+    }
+
+    fetchAllMonthLinks().catch(() => {});
+    return () => { cancelled = true; };
   }, [user?.username, viewMonth, viewYear]);
 
   useEffect(() => {
@@ -266,7 +290,7 @@ export default function DailyPage() {
                 </div>
                 <div className="streak-stat">
                   <div className="label">Total links</div>
-                  <div className="value">{allLinks.length}</div>
+                  <div className="value">{totalLinks}</div>
                 </div>
               </div>
             </div>

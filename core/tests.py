@@ -254,7 +254,7 @@ class LinkViewSetTests(APITestCase):
         self._auth(self.admin)
         response = self.client.get(self._list_url())
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        ids = [l['id'] for l in response.data]
+        ids = [l['id'] for l in response.data['results']]
         self.assertIn(self.creator_link.id, ids)
         self.assertIn(self.other_link.id, ids)
 
@@ -262,7 +262,7 @@ class LinkViewSetTests(APITestCase):
         self._auth(self.creator)
         response = self.client.get(self._list_url())
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        ids = [l['id'] for l in response.data]
+        ids = [l['id'] for l in response.data['results']]
         self.assertIn(self.creator_link.id, ids)
         self.assertNotIn(self.other_link.id, ids)
 
@@ -407,7 +407,7 @@ class CollectionViewSetTests(APITestCase):
         self._auth(self.admin)
         response = self.client.get(self._list_url())
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        ids = [c['id'] for c in response.data]
+        ids = [c['id'] for c in response.data['results']]
         self.assertIn(self.owner_public.id, ids)
         self.assertIn(self.owner_private.id, ids)
         self.assertIn(self.other_public.id, ids)
@@ -417,7 +417,7 @@ class CollectionViewSetTests(APITestCase):
         self._auth(self.owner)
         response = self.client.get(self._list_url())
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        ids = [c['id'] for c in response.data]
+        ids = [c['id'] for c in response.data['results']]
         # Own collections (both public and private) are visible
         self.assertIn(self.owner_public.id, ids)
         self.assertIn(self.owner_private.id, ids)
@@ -684,7 +684,7 @@ class UserLinksTests(APITestCase):
         self._auth(self.admin)
         response = self.client.get(self._url('creator'))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        ids = [l['id'] for l in response.data]
+        ids = [l['id'] for l in response.data['results']]
         self.assertIn(self.link1.id, ids)
         self.assertIn(self.link2.id, ids)
         self.assertNotIn(self.other_link.id, ids)
@@ -693,7 +693,7 @@ class UserLinksTests(APITestCase):
         self._auth(self.creator)
         response = self.client.get(self._url('creator'))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        ids = [l['id'] for l in response.data]
+        ids = [l['id'] for l in response.data['results']]
         self.assertIn(self.link1.id, ids)
 
     def test_creator_cannot_fetch_other_users_links(self):
@@ -754,27 +754,46 @@ class UserLinksByMonthTests(APITestCase):
     def _url(self, username, month, year):
         return reverse('appuser-links-by-month') + f'?username={username}&month={month}&year={year}'
 
-    def test_links_grouped_by_day(self):
+    def test_returns_paginated_envelope(self):
         self._auth(self.admin)
         response = self.client.get(self._url('creator', 5, 2026))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('2026-05-01', response.data)
-        self.assertIn('2026-05-03', response.data)
-        self.assertEqual(len(response.data['2026-05-01']), 1)
-        self.assertEqual(len(response.data['2026-05-03']), 2)
+        for key in ('count', 'next', 'previous', 'results'):
+            self.assertIn(key, response.data)
+
+    def test_results_are_flat_list_of_links(self):
+        # Response is a flat list ordered by link_day; the client groups by date
+        self._auth(self.admin)
+        response = self.client.get(self._url('creator', 5, 2026))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data['results']
+        self.assertIsInstance(results, list)
+        self.assertEqual(len(results), 3)  # may1, may3, may3b
+        # link_day is present on every result so the frontend can group by date
+        for link in results:
+            self.assertIn('link_day', link)
 
     def test_links_from_other_months_excluded(self):
         self._auth(self.admin)
         response = self.client.get(self._url('creator', 5, 2026))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        all_ids = [l['id'] for day_links in response.data.values() for l in day_links]
-        self.assertNotIn(self.june_link.id, all_ids)
+        result_ids = [l['id'] for l in response.data['results']]
+        self.assertNotIn(self.june_link.id, result_ids)
 
-    def test_empty_month_returns_empty_dict(self):
+    def test_correct_links_included(self):
+        self._auth(self.admin)
+        response = self.client.get(self._url('creator', 5, 2026))
+        result_ids = [l['id'] for l in response.data['results']]
+        self.assertIn(self.may1.id, result_ids)
+        self.assertIn(self.may3.id, result_ids)
+        self.assertIn(self.may3b.id, result_ids)
+
+    def test_empty_month_returns_empty_results(self):
         self._auth(self.admin)
         response = self.client.get(self._url('creator', 1, 2025))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data, {})
+        self.assertEqual(response.data['count'], 0)
+        self.assertEqual(response.data['results'], [])
 
     def test_missing_month_returns_400(self):
         self._auth(self.creator)
@@ -918,19 +937,19 @@ class UserCollectionsSummaryTests(APITestCase):
         self._auth(self.admin)
         response = self.client.get(self._url('creator'))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        col_data = next(c for c in response.data if c['id'] == self.col.id)
+        col_data = next(c for c in response.data['results'] if c['id'] == self.col.id)
         self.assertEqual(col_data['total_link_count'], 2)
 
     def test_featured_link_count_correct(self):
         self._auth(self.admin)
         response = self.client.get(self._url('creator'))
-        col_data = next(c for c in response.data if c['id'] == self.col.id)
+        col_data = next(c for c in response.data['results'] if c['id'] == self.col.id)
         self.assertEqual(col_data['featured_link_count'], 1)
 
     def test_empty_collection_has_zero_counts(self):
         self._auth(self.admin)
         response = self.client.get(self._url('creator'))
-        empty_data = next(c for c in response.data if c['id'] == self.empty_col.id)
+        empty_data = next(c for c in response.data['results'] if c['id'] == self.empty_col.id)
         self.assertEqual(empty_data['total_link_count'], 0)
         self.assertEqual(empty_data['featured_link_count'], 0)
 
@@ -1136,7 +1155,7 @@ class UserFeaturedLinksTests(APITestCase):
         self._auth(self.admin)
         response = self.client.get(self._url('creator'))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        ids = [l['id'] for l in response.data]
+        ids = [l['id'] for l in response.data['results']]
         self.assertIn(self.featured.id, ids)
         self.assertNotIn(self.regular.id, ids)
 
@@ -1148,7 +1167,7 @@ class UserFeaturedLinksTests(APITestCase):
         self._auth(self.admin)
         response = self.client.get(self._url('plain'))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data, [])
+        self.assertEqual(response.data['results'], [])
 
     def test_creator_can_fetch_own_featured_links(self):
         self._auth(self.creator)
@@ -2573,3 +2592,334 @@ class ReservedUsernameTests(APITestCase):
         response = self.client.get(self._check_url('coolartist'))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['available'])
+
+
+# ---------------------------------------------------------------------------
+# Pagination — GET /api/links/
+# ---------------------------------------------------------------------------
+
+class LinkListPaginationTests(APITestCase):
+    """
+    Verify that GET /api/links/ returns a DRF pagination envelope and that
+    results are split into pages of 10.
+    """
+
+    def setUp(self):
+        self.creator = AppUser.objects.create_user(
+            username='creator', password='pass', role=AppUser.Role.CREATOR,
+        )
+        self.url = reverse('link-list')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(self.creator)}')
+
+    def _make_links(self, n):
+        for i in range(n):
+            make_link(self.creator, title=f'Link {i}')
+
+    def test_response_has_pagination_envelope(self):
+        self._make_links(1)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for key in ('count', 'next', 'previous', 'results'):
+            self.assertIn(key, response.data)
+
+    def test_ten_links_no_next_page(self):
+        self._make_links(10)
+        response = self.client.get(self.url)
+        self.assertEqual(response.data['count'], 10)
+        self.assertEqual(len(response.data['results']), 10)
+        self.assertIsNone(response.data['next'])
+
+    def test_eleven_links_splits_across_pages(self):
+        self._make_links(11)
+        response = self.client.get(self.url)
+        self.assertEqual(response.data['count'], 11)
+        self.assertEqual(len(response.data['results']), 10)
+        self.assertIsNotNone(response.data['next'])
+
+    def test_page_two_returns_remainder(self):
+        self._make_links(11)
+        response = self.client.get(self.url + '?page=2')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 1)
+        self.assertIsNone(response.data['next'])
+
+
+# ---------------------------------------------------------------------------
+# Pagination — GET /api/collections/
+# ---------------------------------------------------------------------------
+
+class CollectionListPaginationTests(APITestCase):
+    """
+    Verify that GET /api/collections/ returns a DRF pagination envelope and
+    that results are split into pages of 10.
+    """
+
+    def setUp(self):
+        self.owner = AppUser.objects.create_user(
+            username='owner', password='pass', role=AppUser.Role.CREATOR,
+        )
+        self.url = reverse('collection-list')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(self.owner)}')
+
+    def _make_collections(self, n):
+        for i in range(n):
+            make_collection(self.owner, name=f'Collection {i}')
+
+    def test_response_has_pagination_envelope(self):
+        self._make_collections(1)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for key in ('count', 'next', 'previous', 'results'):
+            self.assertIn(key, response.data)
+
+    def test_ten_collections_no_next_page(self):
+        self._make_collections(10)
+        response = self.client.get(self.url)
+        self.assertEqual(response.data['count'], 10)
+        self.assertEqual(len(response.data['results']), 10)
+        self.assertIsNone(response.data['next'])
+
+    def test_eleven_collections_splits_across_pages(self):
+        self._make_collections(11)
+        response = self.client.get(self.url)
+        self.assertEqual(response.data['count'], 11)
+        self.assertEqual(len(response.data['results']), 10)
+        self.assertIsNotNone(response.data['next'])
+
+    def test_page_two_returns_remainder(self):
+        self._make_collections(11)
+        response = self.client.get(self.url + '?page=2')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 1)
+        self.assertIsNone(response.data['next'])
+
+
+# ---------------------------------------------------------------------------
+# Pagination — GET /api/users/links/
+# ---------------------------------------------------------------------------
+
+class UserLinksPaginationTests(APITestCase):
+    """
+    Verify that GET /api/users/links/ returns a DRF pagination envelope and
+    that results are split into pages of 10.
+    """
+
+    def setUp(self):
+        self.admin = AppUser.objects.create_user(
+            username='admin', password='pass', role=AppUser.Role.ADMIN,
+        )
+        self.creator = AppUser.objects.create_user(
+            username='creator', password='pass', role=AppUser.Role.CREATOR,
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(self.admin)}')
+
+    def _url(self, username='creator', page=None):
+        url = reverse('appuser-links') + f'?username={username}'
+        if page:
+            url += f'&page={page}'
+        return url
+
+    def _make_links(self, n):
+        for i in range(n):
+            make_link(self.creator, title=f'Link {i}')
+
+    def test_response_has_pagination_envelope(self):
+        self._make_links(1)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for key in ('count', 'next', 'previous', 'results'):
+            self.assertIn(key, response.data)
+
+    def test_ten_links_no_next_page(self):
+        self._make_links(10)
+        response = self.client.get(self._url())
+        self.assertEqual(response.data['count'], 10)
+        self.assertEqual(len(response.data['results']), 10)
+        self.assertIsNone(response.data['next'])
+
+    def test_eleven_links_splits_across_pages(self):
+        self._make_links(11)
+        response = self.client.get(self._url())
+        self.assertEqual(response.data['count'], 11)
+        self.assertEqual(len(response.data['results']), 10)
+        self.assertIsNotNone(response.data['next'])
+
+    def test_page_two_returns_remainder(self):
+        self._make_links(11)
+        response = self.client.get(self._url(page=2))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 1)
+        self.assertIsNone(response.data['next'])
+
+
+# ---------------------------------------------------------------------------
+# Pagination — GET /api/users/featured_links/
+# ---------------------------------------------------------------------------
+
+class UserFeaturedLinksPaginationTests(APITestCase):
+    """
+    Verify that GET /api/users/featured_links/ returns a DRF pagination
+    envelope. In practice featured links are capped at 8 so a second page
+    is never reached, but the envelope itself must always be present.
+    """
+
+    def setUp(self):
+        self.admin = AppUser.objects.create_user(
+            username='admin', password='pass', role=AppUser.Role.ADMIN,
+        )
+        self.creator = AppUser.objects.create_user(
+            username='creator', password='pass', role=AppUser.Role.CREATOR,
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(self.admin)}')
+
+    def _url(self, username='creator'):
+        return reverse('appuser-featured-links') + f'?username={username}'
+
+    def test_response_has_pagination_envelope(self):
+        make_link(self.creator, category=Link.Category.FEATURED)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for key in ('count', 'next', 'previous', 'results'):
+            self.assertIn(key, response.data)
+
+    def test_empty_featured_links_returns_zero_count(self):
+        make_link(self.creator, category=Link.Category.REGULAR)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 0)
+        self.assertEqual(response.data['results'], [])
+
+    def test_count_matches_number_of_featured_links(self):
+        for _ in range(3):
+            make_link(self.creator, category=Link.Category.FEATURED)
+        make_link(self.creator, category=Link.Category.REGULAR)
+        response = self.client.get(self._url())
+        self.assertEqual(response.data['count'], 3)
+        self.assertEqual(len(response.data['results']), 3)
+
+
+# ---------------------------------------------------------------------------
+# Pagination — GET /api/users/collections/summary/
+# ---------------------------------------------------------------------------
+
+class UserCollectionsSummaryPaginationTests(APITestCase):
+    """
+    Verify that GET /api/users/collections/summary/ returns a DRF pagination
+    envelope and that results are split into pages of 10.
+    """
+
+    def setUp(self):
+        self.admin = AppUser.objects.create_user(
+            username='admin', password='pass', role=AppUser.Role.ADMIN,
+        )
+        self.creator = AppUser.objects.create_user(
+            username='creator', password='pass', role=AppUser.Role.CREATOR,
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(self.admin)}')
+
+    def _url(self, username='creator', page=None):
+        url = reverse('appuser-collections-summary') + f'?username={username}'
+        if page:
+            url += f'&page={page}'
+        return url
+
+    def _make_collections(self, n):
+        for i in range(n):
+            make_collection(self.creator, name=f'Col {i}')
+
+    def test_response_has_pagination_envelope(self):
+        self._make_collections(1)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for key in ('count', 'next', 'previous', 'results'):
+            self.assertIn(key, response.data)
+
+    def test_eleven_collections_splits_across_pages(self):
+        self._make_collections(11)
+        response = self.client.get(self._url())
+        self.assertEqual(response.data['count'], 11)
+        self.assertEqual(len(response.data['results']), 10)
+        self.assertIsNotNone(response.data['next'])
+
+    def test_page_two_returns_remainder(self):
+        self._make_collections(11)
+        response = self.client.get(self._url(page=2))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 1)
+
+
+# ---------------------------------------------------------------------------
+# Pagination — GET /api/users/links/by_month/
+# ---------------------------------------------------------------------------
+
+class UserLinksByMonthPaginationTests(APITestCase):
+    """
+    Verify that GET /api/users/links/by_month/ returns a flat DRF pagination
+    envelope (not a grouped dict) and splits correctly across pages of 10.
+    """
+
+    def setUp(self):
+        self.admin = AppUser.objects.create_user(
+            username='admin', password='pass', role=AppUser.Role.ADMIN,
+        )
+        self.creator = AppUser.objects.create_user(
+            username='creator', password='pass', role=AppUser.Role.CREATOR,
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_access_token(self.admin)}')
+
+    def _url(self, username='creator', month=6, year=2026, page=None):
+        url = (
+            reverse('appuser-links-by-month')
+            + f'?username={username}&month={month}&year={year}'
+        )
+        if page:
+            url += f'&page={page}'
+        return url
+
+    def _make_month_links(self, n):
+        for i in range(n):
+            make_link(
+                self.creator,
+                title=f'Link {i}',
+                link_day=datetime.datetime(2026, 6, 1 + (i % 28), tzinfo=datetime.timezone.utc),
+            )
+
+    def test_response_has_pagination_envelope(self):
+        self._make_month_links(1)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for key in ('count', 'next', 'previous', 'results'):
+            self.assertIn(key, response.data)
+
+    def test_results_are_flat_list_not_dict(self):
+        self._make_month_links(3)
+        response = self.client.get(self._url())
+        self.assertIsInstance(response.data['results'], list)
+
+    def test_each_result_has_link_day_field(self):
+        # The frontend uses link_day to reconstruct the {date: links[]} grouping
+        self._make_month_links(3)
+        response = self.client.get(self._url())
+        for link in response.data['results']:
+            self.assertIn('link_day', link)
+
+    def test_ten_links_no_next_page(self):
+        self._make_month_links(10)
+        response = self.client.get(self._url())
+        self.assertEqual(response.data['count'], 10)
+        self.assertEqual(len(response.data['results']), 10)
+        self.assertIsNone(response.data['next'])
+
+    def test_eleven_links_splits_across_pages(self):
+        self._make_month_links(11)
+        response = self.client.get(self._url())
+        self.assertEqual(response.data['count'], 11)
+        self.assertEqual(len(response.data['results']), 10)
+        self.assertIsNotNone(response.data['next'])
+
+    def test_page_two_returns_remainder(self):
+        self._make_month_links(11)
+        response = self.client.get(self._url(page=2))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 1)
+        self.assertIsNone(response.data['next'])

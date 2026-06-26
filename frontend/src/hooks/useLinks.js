@@ -8,8 +8,14 @@ import {
 } from '../api/links';
 import { addLinkToCollection } from '../api/collections';
 
+const PAGE_SIZE = 10;
+
 export function useLinks(username) {
   const [links, setLinks] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrev, setHasPrev] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -17,31 +23,38 @@ export function useLinks(username) {
     if (!username) return;
     try {
       setLoading(true);
-      const { data } = await getUserLinks(username);
-      setLinks(data);
+      const { data } = await getUserLinks(username, page);
+      setLinks(data.results);
+      setTotalCount(data.count);
+      setHasNext(!!data.next);
+      setHasPrev(!!data.previous);
     } catch (e) {
       setError(e);
     } finally {
       setLoading(false);
     }
-  }, [username]);
+  }, [username, page]);
 
   useEffect(() => {
     refetch();
   }, [refetch]);
 
-  // Creates link, optionally adding to a collection
+  const nextPage = () => setPage((p) => p + 1);
+  const prevPage = () => setPage((p) => p - 1);
+
+  // Creates a link, optionally adding to a collection, then resets to page 1
+  // so the newly created link (ordered by -created_at) is immediately visible.
   const addLink = async ({ collectionId, ...payload }) => {
     if (collectionId) {
-      // add_link creates the link AND adds it to the collection in one call
       await addLinkToCollection(collectionId, payload);
     } else {
-      const { data: created } = await createLink(payload);
-      setLinks((prev) => [created, ...prev]);
-      return created;
+      await createLink(payload);
     }
-    // Refetch to get updated list
-    await refetch();
+    if (page !== 1) {
+      setPage(1); // triggers refetch via useEffect
+    } else {
+      await refetch();
+    }
   };
 
   const updateLink = async (id, payload) => {
@@ -52,7 +65,14 @@ export function useLinks(username) {
 
   const deleteLink = async (id) => {
     await deleteLinkApi(id);
-    setLinks((prev) => prev.filter((l) => l.id !== id));
+    // If we just deleted the last item on a non-first page, step back
+    const remaining = links.length - 1;
+    if (remaining === 0 && page > 1) {
+      setPage((p) => p - 1); // triggers refetch via useEffect
+    } else {
+      setLinks((prev) => prev.filter((l) => l.id !== id));
+      setTotalCount((c) => c - 1);
+    }
   };
 
   // Toggles featured/regular; handles server 400 for max 8 limit
@@ -105,5 +125,9 @@ export function useLinks(username) {
     }
   };
 
-  return { links, loading, error, addLink, updateLink, deleteLink, toggleFeatured, reorderLinks, refetch };
+  return {
+    links, loading, error,
+    page, nextPage, prevPage, totalCount, hasNext, hasPrev,
+    addLink, updateLink, deleteLink, toggleFeatured, reorderLinks, refetch,
+  };
 }

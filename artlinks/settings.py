@@ -192,3 +192,28 @@ EMAIL_HOST_PASSWORD = os.environ.get('MAILJET_SECRET_KEY', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@artlinks.app')
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 PASSWORD_RESET_TIMEOUT = 1800  # 30 minutes
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'artlinks': {
+            'format': '[{asctime}] {levelname} {name} {message}',
+            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'artlinks',
+        },
+    },
+    'loggers': {
+        'artlinks': {
+            'handlers': ['console'],
+            'level': 'DEBUG' if DEBUG else 'INFO',
+            'propagate': False,
+        },
+    },
+}

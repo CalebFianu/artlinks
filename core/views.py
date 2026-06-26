@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from datetime import date
 from django.conf import settings
@@ -50,6 +51,8 @@ from .serializers import (
 )
 from .social_auth import verify_google_token, verify_microsoft_token
 
+logger = logging.getLogger('artlinks')
+
 _SUPPORT_EMAIL = 'support@artlinks.to'
 
 # Pending social-signup tokens are valid for 10 minutes
@@ -67,6 +70,20 @@ def _tokens_for(user: AppUser) -> dict:
     return {'access': str(refresh.access_token), 'refresh': str(refresh)}
 
 
+# ── Pagination ────────────────────────────────────────────────────────────────
+
+class ArtlinksPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = None  # fixed at 10; no client override
+
+
+class AdminUserPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = None  # fixed at 10; no client override
+
+
+# ── Auth views ────────────────────────────────────────────────────────────────
+
 class ArtlinksTokenObtainPairView(TokenObtainPairView):
     """
     Extends the standard JWT login view to block admin-suspended accounts.
@@ -81,6 +98,7 @@ class ArtlinksTokenObtainPairView(TokenObtainPairView):
             try:
                 user = AppUser.objects.get(username=username)
                 if user.admin_disabled_at is not None:
+                    logger.warning('action=auth.login_suspended')
                     return Response(
                         {
                             'detail': (
@@ -92,6 +110,7 @@ class ArtlinksTokenObtainPairView(TokenObtainPairView):
                     )
             except AppUser.DoesNotExist:
                 pass
+            logger.info('action=auth.login')
         return response
 
 
@@ -102,6 +121,7 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        logger.info('action=auth.register')
         return Response(_tokens_for(user), status=status.HTTP_201_CREATED)
 
 
@@ -164,6 +184,7 @@ class SocialAuthView(APIView):
         try:
             info = verify_fn(token)
         except ValueError as exc:
+            logger.warning('action=auth.social_token_invalid provider=%s', provider)
             return Response({'detail': str(exc)}, status=status.HTTP_401_UNAUTHORIZED)
 
         email = info['email']
@@ -175,6 +196,7 @@ class SocialAuthView(APIView):
 
         try:
             user = AppUser.objects.get(email=email)
+            logger.info('action=auth.social_login provider=%s', provider)
             return Response(_tokens_for(user))
         except AppUser.DoesNotExist:
             pass
@@ -185,6 +207,7 @@ class SocialAuthView(APIView):
             'provider_id': info['provider_id'],
         }
         pending_token = signing.dumps(pending_payload, salt=_PENDING_TOKEN_SALT)
+        logger.info('action=auth.social_signup_pending provider=%s', provider)
 
         return Response({
             'status': 'pending',
@@ -217,11 +240,13 @@ class SocialCompleteView(APIView):
                 max_age=_PENDING_TOKEN_MAX_AGE,
             )
         except signing.SignatureExpired:
+            logger.warning('action=auth.social_token_expired')
             return Response(
                 {'detail': 'This link has expired. Please sign in again.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         except signing.BadSignature:
+            logger.warning('action=auth.social_token_invalid')
             return Response(
                 {'detail': 'Invalid token.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -239,6 +264,7 @@ class SocialCompleteView(APIView):
         user = AppUser(email=email, username=username, role=AppUser.Role.CREATOR)
         user.set_unusable_password()
         user.save()
+        logger.info('action=auth.social_signup_complete')
 
         return Response(_tokens_for(user), status=status.HTTP_201_CREATED)
 
@@ -314,7 +340,10 @@ class AppUserViewSet(ModelViewSet):
         qs = Link.objects.filter(user=target_user).order_by(
             F('order').asc(nulls_last=True), '-created_at'
         )
-        return Response(LinkSerializer(qs, many=True).data)
+        paginator = ArtlinksPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        logger.debug('action=link.list page=%s count=%s', request.query_params.get('page', 1), qs.count())
+        return paginator.get_paginated_response(LinkSerializer(page, many=True).data)
 
     @extend_schema(parameters=[
         _USERNAME_PARAM,
@@ -345,10 +374,12 @@ class AppUserViewSet(ModelViewSet):
         qs = Link.objects.filter(
             user=target_user, link_day__year=year, link_day__month=month,
         ).order_by('link_day')
-        grouped = defaultdict(list)
-        for link in qs:
-            grouped[link.link_day.date().isoformat()].append(LinkSerializer(link).data)
-        return Response(dict(grouped))
+        # Returns a flat paginated list of links ordered by link_day.
+        # The frontend groups them by date to render the calendar view.
+        paginator = ArtlinksPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        logger.debug('action=link.list_by_month month=%s year=%s', month, year)
+        return paginator.get_paginated_response(LinkSerializer(page, many=True).data)
 
     @extend_schema(parameters=[_USERNAME_PARAM])
     @action(detail=False, methods=['get'], url_path='profile')
@@ -385,7 +416,10 @@ class AppUserViewSet(ModelViewSet):
                 'links', filter=Q(links__category=Link.Category.FEATURED)
             ),
         ).order_by('id')
-        return Response(CollectionSummarySerializer(qs, many=True).data)
+        paginator = ArtlinksPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        logger.debug('action=collection.summary page=%s', request.query_params.get('page', 1))
+        return paginator.get_paginated_response(CollectionSummarySerializer(page, many=True).data)
 
     @extend_schema(parameters=[_USERNAME_PARAM])
     @action(detail=False, methods=['get'], url_path='stats')
@@ -440,7 +474,10 @@ class AppUserViewSet(ModelViewSet):
         qs = Link.objects.filter(
             user=target_user, category=Link.Category.FEATURED,
         ).order_by('-created_at')
-        return Response(LinkSerializer(qs, many=True).data)
+        paginator = ArtlinksPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        logger.debug('action=link.featured_list page=%s', request.query_params.get('page', 1))
+        return paginator.get_paginated_response(LinkSerializer(page, many=True).data)
 
     @action(detail=True, methods=['post'], url_path='avatar', parser_classes=[MultiPartParser])
     def avatar(self, request, pk=None):
@@ -448,16 +485,19 @@ class AppUserViewSet(ModelViewSet):
         file = request.FILES.get('image')
 
         if not file:
+            logger.warning('action=user.avatar_upload_failed reason=no_image')
             return Response({'detail': 'No image provided.'}, status=status.HTTP_400_BAD_REQUEST)
 
         allowed = {'image/jpeg', 'image/png', 'image/webp'}
         if file.content_type not in allowed:
+            logger.warning('action=user.avatar_upload_failed reason=unsupported_type')
             return Response(
                 {'detail': 'Unsupported file type. Use JPEG, PNG, or WebP.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if file.size > 5 * 1024 * 1024:
+            logger.warning('action=user.avatar_upload_failed reason=file_too_large')
             return Response(
                 {'detail': 'File too large (max 5 MB).'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -468,6 +508,7 @@ class AppUserViewSet(ModelViewSet):
 
         user.profile_picture = url
         user.save(update_fields=['profile_picture'])
+        logger.info('action=user.avatar_upload user_id=%s', user.pk)
         return Response({'profile_picture': url})
 
     @action(detail=False, methods=['patch'], url_path='update_profile')
@@ -478,6 +519,7 @@ class AppUserViewSet(ModelViewSet):
         for attr, value in serializer.validated_data.items():
             setattr(user, attr, value)
         user.save(update_fields=list(serializer.validated_data.keys()))
+        logger.info('action=user.profile_update user_id=%s', user.pk)
         return Response({'bio': user.bio})
 
     @action(detail=False, methods=['post'], url_path='disable_account')
@@ -485,6 +527,7 @@ class AppUserViewSet(ModelViewSet):
         user = self._get_own_user(request)
         user.disabled_at = timezone.now()
         user.save(update_fields=['disabled_at'])
+        logger.info('action=user.disable_account user_id=%s', user.pk)
         return Response({'detail': 'Account disabled.'})
 
     @action(detail=False, methods=['post'], url_path='re_enable_account')
@@ -492,6 +535,7 @@ class AppUserViewSet(ModelViewSet):
         user = self._get_own_user(request)
         user.disabled_at = None
         user.save(update_fields=['disabled_at'])
+        logger.info('action=user.re_enable_account user_id=%s', user.pk)
         return Response({'detail': 'Account re-enabled.'})
 
     @extend_schema(parameters=[
@@ -533,6 +577,17 @@ class SocialLinkViewSet(ModelViewSet):
         if SocialLink.objects.filter(user=user, platform=platform).exists():
             raise DRFValidationError({'platform': 'You already have a link for this platform.'})
         serializer.save(user=user)
+        logger.info('action=social_link.create platform=%s', platform)
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        logger.info('action=social_link.update social_link_id=%s', serializer.instance.pk)
+
+    def perform_destroy(self, instance):
+        social_link_id = instance.pk
+        platform = instance.platform
+        super().perform_destroy(instance)
+        logger.info('action=social_link.delete social_link_id=%s platform=%s', social_link_id, platform)
 
 
 class PlatformStatsView(APIView):
@@ -547,11 +602,6 @@ class PlatformStatsView(APIView):
 
 
 # ── Admin user management ────────────────────────────────────────────────────
-
-class AdminUserPagination(PageNumberPagination):
-    page_size = 10
-    page_size_query_param = None  # fixed at 10; no client override
-
 
 class AdminUserListView(APIView):
     """
@@ -579,6 +629,7 @@ class AdminUserListView(APIView):
         paginator = AdminUserPagination()
         page = paginator.paginate_queryset(qs, request)
         serializer = AdminUserSerializer(page, many=True)
+        logger.info('action=admin.user_list page=%s', request.query_params.get('page', 1))
         return paginator.get_paginated_response(serializer.data)
 
 
@@ -601,6 +652,7 @@ class AdminDisableUserView(APIView):
             )
         user.admin_disabled_at = timezone.now()
         user.save(update_fields=['admin_disabled_at'])
+        logger.info('action=admin.user_disable target_id=%s', pk)
         return Response({'detail': f'@{user.username} has been suspended.'})
 
 
@@ -618,11 +670,13 @@ class AdminEnableUserView(APIView):
             return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
         user.admin_disabled_at = None
         user.save(update_fields=['admin_disabled_at'])
+        logger.info('action=admin.user_enable target_id=%s', pk)
         return Response({'detail': f'@{user.username} has been reinstated.'})
 
 
 class LinkViewSet(ModelViewSet):
     permission_classes = [LinkPermission]
+    pagination_class = ArtlinksPagination
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -649,6 +703,7 @@ class LinkViewSet(ModelViewSet):
         for position, link_id in enumerate(ids):
             Link.objects.filter(id=link_id).update(order=position)
 
+        logger.info('action=link.reorder count=%s', len(ids))
         return Response({'detail': 'Reordered.'})
 
     def create(self, request, *args, **kwargs):
@@ -671,11 +726,22 @@ class LinkViewSet(ModelViewSet):
                 raise DRFValidationError({'category': 'Maximum of 8 featured links allowed.'})
 
         serializer.save(user=user)
+        logger.info('action=link.create link_id=%s', serializer.instance.pk)
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        logger.info('action=link.update link_id=%s', serializer.instance.pk)
+
+    def perform_destroy(self, instance):
+        link_id = instance.pk
+        super().perform_destroy(instance)
+        logger.info('action=link.delete link_id=%s', link_id)
 
 
 class CollectionViewSet(ModelViewSet):
     serializer_class = CollectionSerializer
     permission_classes = [CollectionPermission]
+    pagination_class = ArtlinksPagination
 
     def get_queryset(self):
         user = self.request.user
@@ -703,6 +769,16 @@ class CollectionViewSet(ModelViewSet):
                 serializer.save(user=target_user)
             else:
                 serializer.save(user=self.request.user)
+        logger.info('action=collection.create collection_id=%s', serializer.instance.pk)
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        logger.info('action=collection.update collection_id=%s', serializer.instance.pk)
+
+    def perform_destroy(self, instance):
+        collection_id = instance.pk
+        super().perform_destroy(instance)
+        logger.info('action=collection.delete collection_id=%s', collection_id)
 
     @extend_schema(request=LinkCreateSerializer, responses=CollectionSerializer)
     @action(detail=True, methods=['post'], url_path='add_link')
@@ -719,6 +795,7 @@ class CollectionViewSet(ModelViewSet):
 
         link = serializer.save(user=user)
         collection.links.add(link)
+        logger.info('action=collection.add_link collection_id=%s link_id=%s', collection.pk, link.pk)
         return Response(CollectionSerializer(collection).data, status=status.HTTP_200_OK)
 
 
@@ -760,6 +837,7 @@ class PasswordResetRequestView(APIView):
             fail_silently=False,
         )
 
+        logger.info('action=auth.password_reset_request')
         return Response({'detail': 'If that email is registered, a reset link has been sent.'})
 
 
@@ -782,12 +860,14 @@ class PasswordResetConfirmView(APIView):
             user_pk = force_str(urlsafe_base64_decode(uid))
             user = AppUser.objects.get(pk=user_pk)
         except (TypeError, ValueError, OverflowError, AppUser.DoesNotExist):
+            logger.warning('action=auth.password_reset_invalid reason=bad_uid')
             return Response(
                 {'detail': 'Invalid or expired reset link.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not PasswordResetTokenGenerator().check_token(user, token):
+            logger.warning('action=auth.password_reset_invalid reason=bad_token')
             return Response(
                 {'detail': 'Invalid or expired reset link.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -795,4 +875,5 @@ class PasswordResetConfirmView(APIView):
 
         user.set_password(password)
         user.save()
+        logger.info('action=auth.password_reset_confirm')
         return Response({'detail': 'Password has been reset successfully.'})
