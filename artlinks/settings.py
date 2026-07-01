@@ -53,6 +53,19 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',          # general anonymous browsing
+        'user': '500/hour',          # general authenticated usage
+        'login': '10/hour',          # brute-force protection
+        'register': '5/hour',        # account creation spam
+        'password_reset': '5/hour',  # email spam protection
+        'username_check': '60/hour', # real-time availability checks
+        'avatar_upload': '10/hour',  # file upload abuse
+    },
 }
 
 SPECTACULAR_SETTINGS = {

@@ -434,6 +434,93 @@ body[data-variant="studio"] .btn.primary:hover { background: var(--ink-soft); }
 }
 body[data-variant="studio"] .modal { box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
 
+/* ============ RATE LIMIT BANNER ============ */
+.rate-limit-banner {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  animation: rate-limit-slide-up 0.25s ease;
+  pointer-events: auto;
+}
+
+@keyframes rate-limit-slide-up {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.rate-limit-banner__inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0 color-mix(in srgb, var(--ink) 50%, transparent);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  max-width: min(420px, 90vw);
+  width: max-content;
+}
+
+.rate-limit-banner__icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.rate-limit-banner__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.rate-limit-banner__text strong {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.rate-limit-banner__text span {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.rate-limit-banner__close {
+  background: none;
+  border: none;
+  color: var(--paper);
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0.6;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: opacity 0.15s;
+}
+
+.rate-limit-banner__close:hover { opacity: 1; }
+
+/* ============ TOAST ============ */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  padding: 10px 18px;
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0 color-mix(in srgb, var(--ink) 50%, transparent);
+  z-index: 190;
+  white-space: nowrap;
+  animation: rate-limit-slide-up 0.2s ease;
+  pointer-events: none;
+}
+
 .field {
   display: block;
   margin-bottom: 16px;

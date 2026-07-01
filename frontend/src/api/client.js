@@ -64,6 +64,13 @@ client.interceptors.response.use(
       }
     }
 
+    if (error.response?.status === 429) {
+      const retryAfter = error.response.headers?.['retry-after'];
+      window.dispatchEvent(new CustomEvent('artlinks:ratelimit', {
+        detail: { retryAfter: retryAfter ? parseInt(retryAfter, 10) : null },
+      }));
+    }
+
     return Promise.reject(error);
   }
 );

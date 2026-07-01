@@ -24,6 +24,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import AppUser, Collection, Link, SocialLink
+from .throttles import (
+    AvatarUploadThrottle,
+    LoginThrottle,
+    PasswordResetThrottle,
+    RegisterThrottle,
+    UsernameCheckThrottle,
+)
 from .validators import check_offensive_content
 from .permissions import (
     AppUserPermission,
@@ -90,6 +97,7 @@ class ArtlinksTokenObtainPairView(TokenObtainPairView):
     Credential validation runs first so wrong-password attempts still get
     a generic 'No active account found' rather than revealing suspension status.
     """
+    throttle_classes = [LoginThrottle]
 
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
@@ -116,6 +124,7 @@ class ArtlinksTokenObtainPairView(TokenObtainPairView):
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [RegisterThrottle]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -132,6 +141,7 @@ class UsernameCheckView(APIView):
     Used by the signup form for real-time availability feedback.
     """
     permission_classes = [AllowAny]
+    throttle_classes = [UsernameCheckThrottle]
 
     def get(self, request):
         import re
@@ -479,7 +489,7 @@ class AppUserViewSet(ModelViewSet):
         logger.debug('action=link.featured_list page=%s', request.query_params.get('page', 1))
         return paginator.get_paginated_response(LinkSerializer(page, many=True).data)
 
-    @action(detail=True, methods=['post'], url_path='avatar', parser_classes=[MultiPartParser])
+    @action(detail=True, methods=['post'], url_path='avatar', parser_classes=[MultiPartParser], throttle_classes=[AvatarUploadThrottle])
     def avatar(self, request, pk=None):
         user = self.get_object()  # enforces AppUserPermission (own record only for non-admins)
         file = request.FILES.get('image')
@@ -806,6 +816,7 @@ class PasswordResetRequestView(APIView):
     Always returns the same success message to prevent email enumeration.
     """
     permission_classes = [AllowAny]
+    throttle_classes = [PasswordResetThrottle]
 
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)

@@ -1,7 +1,9 @@
 import datetime
+from unittest.mock import patch
 
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core import mail
+from django.core.cache import cache as django_cache
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes
@@ -11,6 +13,33 @@ from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import AppUser, Collection, Link, SocialLink
+from .throttles import (
+    AvatarUploadThrottle,
+    LoginThrottle,
+    PasswordResetThrottle,
+    RegisterThrottle,
+    UsernameCheckThrottle,
+)
+
+
+# ---------------------------------------------------------------------------
+# Base test case
+# ---------------------------------------------------------------------------
+
+class ArtlinksAPITestCase(APITestCase):
+    """
+    Base class for all Artlinks tests.
+
+    Clears the throttle cache before every test so that rate-limit counters
+    accumulated by earlier tests do not bleed into later ones.  This is done
+    in ``_pre_setup`` (called by the test runner before ``setUp``) so that
+    every subclass gets a fresh cache regardless of whether it calls
+    ``super().setUp()``.
+    """
+
+    def _pre_setup(self):
+        django_cache.clear()
+        super()._pre_setup()
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +73,7 @@ def make_collection(user, **kwargs):
 # AppUserViewSet
 # ---------------------------------------------------------------------------
 
-class AppUserViewSetTests(APITestCase):
+class AppUserViewSetTests(ArtlinksAPITestCase):
     """
     Admin  → full CRUD on all users.
     Creator/Guest → retrieve/update/delete own account only; list and create blocked.
@@ -201,7 +230,7 @@ class AppUserViewSetTests(APITestCase):
 # LinkViewSet
 # ---------------------------------------------------------------------------
 
-class LinkViewSetTests(APITestCase):
+class LinkViewSetTests(ArtlinksAPITestCase):
     """
     Admin  → full CRUD, sees all links.
     Creator/Guest → full CRUD on own links only; other users' links return 403.
@@ -354,7 +383,7 @@ class LinkViewSetTests(APITestCase):
 # CollectionViewSet
 # ---------------------------------------------------------------------------
 
-class CollectionViewSetTests(APITestCase):
+class CollectionViewSetTests(ArtlinksAPITestCase):
     """
     Admin   → full CRUD, sees all collections.
     Owner   → full CRUD on own collections (public or private).
@@ -551,7 +580,7 @@ class CollectionViewSetTests(APITestCase):
 # CollectionViewSet — add_link action
 # ---------------------------------------------------------------------------
 
-class CollectionAddLinkTests(APITestCase):
+class CollectionAddLinkTests(ArtlinksAPITestCase):
     """
     POST /api/collections/{id}/add_link/
 
@@ -656,7 +685,7 @@ class CollectionAddLinkTests(APITestCase):
 # UserLinksTests — GET /api/users/links/?username=
 # ---------------------------------------------------------------------------
 
-class UserLinksTests(APITestCase):
+class UserLinksTests(ArtlinksAPITestCase):
     def setUp(self):
         self.admin = AppUser.objects.create_user(
             username='admin', password='pass', role=AppUser.Role.ADMIN,
@@ -720,7 +749,7 @@ class UserLinksTests(APITestCase):
 # UserLinksByMonthTests — GET /api/users/links/by_month/
 # ---------------------------------------------------------------------------
 
-class UserLinksByMonthTests(APITestCase):
+class UserLinksByMonthTests(ArtlinksAPITestCase):
     def setUp(self):
         self.admin = AppUser.objects.create_user(
             username='admin', password='pass', role=AppUser.Role.ADMIN,
@@ -832,7 +861,7 @@ class UserLinksByMonthTests(APITestCase):
 # UserProfileTests — GET /api/users/profile/?username=
 # ---------------------------------------------------------------------------
 
-class UserProfileTests(APITestCase):
+class UserProfileTests(ArtlinksAPITestCase):
     def setUp(self):
         self.admin = AppUser.objects.create_user(
             username='admin', password='pass', role=AppUser.Role.ADMIN,
@@ -910,7 +939,7 @@ class UserProfileTests(APITestCase):
 # UserCollectionsSummaryTests — GET /api/users/collections/summary/?username=
 # ---------------------------------------------------------------------------
 
-class UserCollectionsSummaryTests(APITestCase):
+class UserCollectionsSummaryTests(ArtlinksAPITestCase):
     def setUp(self):
         self.admin = AppUser.objects.create_user(
             username='admin', password='pass', role=AppUser.Role.ADMIN,
@@ -972,7 +1001,7 @@ class UserCollectionsSummaryTests(APITestCase):
 # UserStatsTests — GET /api/users/stats/?username=
 # ---------------------------------------------------------------------------
 
-class UserStatsTests(APITestCase):
+class UserStatsTests(ArtlinksAPITestCase):
     def setUp(self):
         self.admin = AppUser.objects.create_user(
             username='admin', password='pass', role=AppUser.Role.ADMIN,
@@ -1042,7 +1071,7 @@ class UserStatsTests(APITestCase):
 # RecentCollectionLinksTests — GET /api/users/recent_collection_links/?username=
 # ---------------------------------------------------------------------------
 
-class RecentCollectionLinksTests(APITestCase):
+class RecentCollectionLinksTests(ArtlinksAPITestCase):
     def setUp(self):
         self.admin = AppUser.objects.create_user(
             username='admin', password='pass', role=AppUser.Role.ADMIN,
@@ -1131,7 +1160,7 @@ class RecentCollectionLinksTests(APITestCase):
 # UserFeaturedLinksTests — GET /api/users/featured_links/?username=
 # ---------------------------------------------------------------------------
 
-class UserFeaturedLinksTests(APITestCase):
+class UserFeaturedLinksTests(ArtlinksAPITestCase):
     def setUp(self):
         self.admin = AppUser.objects.create_user(
             username='admin', password='pass', role=AppUser.Role.ADMIN,
@@ -1188,7 +1217,7 @@ class UserFeaturedLinksTests(APITestCase):
 # FeaturedLinkCapTests — POST /api/links/ (max 8 featured)
 # ---------------------------------------------------------------------------
 
-class FeaturedLinkCapTests(APITestCase):
+class FeaturedLinkCapTests(ArtlinksAPITestCase):
     def setUp(self):
         self.admin = AppUser.objects.create_user(
             username='admin', password='pass', role=AppUser.Role.ADMIN,
@@ -1250,7 +1279,7 @@ class FeaturedLinkCapTests(APITestCase):
 # UserLinksByDayTests — GET /api/users/links/by_day/?username=&date=
 # ---------------------------------------------------------------------------
 
-class UserLinksByDayTests(APITestCase):
+class UserLinksByDayTests(ArtlinksAPITestCase):
     def setUp(self):
         self.admin = AppUser.objects.create_user(
             username='admin', password='pass', role=AppUser.Role.ADMIN,
@@ -1320,7 +1349,7 @@ class UserLinksByDayTests(APITestCase):
 # RegisterViewTests — POST /api/auth/register/
 # ---------------------------------------------------------------------------
 
-class RegisterViewTests(APITestCase):
+class RegisterViewTests(ArtlinksAPITestCase):
     def _url(self):
         return reverse('register')
 
@@ -1385,7 +1414,7 @@ class RegisterViewTests(APITestCase):
 # OffensiveContentTests — profanity validation across all affected fields
 # ---------------------------------------------------------------------------
 
-class OffensiveContentTests(APITestCase):
+class OffensiveContentTests(ArtlinksAPITestCase):
     """
     Verifies that better-profanity blocks offensive input on every field
     that has a check_offensive_content validator.
@@ -1508,7 +1537,7 @@ class OffensiveContentTests(APITestCase):
 # UpdateProfileTests — PATCH /api/users/update_profile/
 # ---------------------------------------------------------------------------
 
-class UpdateProfileTests(APITestCase):
+class UpdateProfileTests(ArtlinksAPITestCase):
     """
     Authenticated users can update their own bio via update_profile.
     Unauthenticated requests are blocked.
@@ -1564,7 +1593,7 @@ class UpdateProfileTests(APITestCase):
 # DisableAccountTests — POST /api/users/disable_account/
 # ---------------------------------------------------------------------------
 
-class DisableAccountTests(APITestCase):
+class DisableAccountTests(ArtlinksAPITestCase):
     """
     POST /api/users/disable_account/ sets disabled_at to the current time.
     Disabled users are excluded from search and their profile returns 404.
@@ -1622,7 +1651,7 @@ class DisableAccountTests(APITestCase):
 # ReEnableAccountTests — POST /api/users/re_enable_account/
 # ---------------------------------------------------------------------------
 
-class ReEnableAccountTests(APITestCase):
+class ReEnableAccountTests(ArtlinksAPITestCase):
     """
     POST /api/users/re_enable_account/ clears disabled_at.
     Re-enabled users reappear in search and their profile becomes accessible again.
@@ -1689,7 +1718,7 @@ class ReEnableAccountTests(APITestCase):
 # UserSearchTests — GET /api/users/search/?q=
 # ---------------------------------------------------------------------------
 
-class UserSearchTests(APITestCase):
+class UserSearchTests(ArtlinksAPITestCase):
     """
     Active users appear in search results; disabled users are always excluded.
     """
@@ -1741,7 +1770,7 @@ class UserSearchTests(APITestCase):
 # DisabledProfileAccessTests — GET /api/users/profile/?username=
 # ---------------------------------------------------------------------------
 
-class DisabledProfileAccessTests(APITestCase):
+class DisabledProfileAccessTests(ArtlinksAPITestCase):
     """
     Accessing the profile of a disabled user returns 404 for all callers.
     Active user profiles remain accessible.
@@ -1794,7 +1823,7 @@ class DisabledProfileAccessTests(APITestCase):
 # ArtlinksTokenObtainPairView — POST /api/auth/token/
 # ---------------------------------------------------------------------------
 
-class LoginViewTests(APITestCase):
+class LoginViewTests(ArtlinksAPITestCase):
     """
     The custom login view wraps simplejwt's TokenObtainPairView to block
     accounts that have been admin-suspended (admin_disabled_at is set).
@@ -1865,7 +1894,7 @@ class LoginViewTests(APITestCase):
 # AdminUserListView — GET /api/admin/users/
 # ---------------------------------------------------------------------------
 
-class AdminUserListViewTests(APITestCase):
+class AdminUserListViewTests(ArtlinksAPITestCase):
     """
     GET /api/admin/users/?page=N
 
@@ -2024,7 +2053,7 @@ class AdminUserListViewTests(APITestCase):
 # AdminDisableUserView — POST /api/admin/users/<pk>/disable/
 # ---------------------------------------------------------------------------
 
-class AdminDisableUserViewTests(APITestCase):
+class AdminDisableUserViewTests(ArtlinksAPITestCase):
     """
     POST /api/admin/users/<pk>/disable/
 
@@ -2110,7 +2139,7 @@ class AdminDisableUserViewTests(APITestCase):
 # AdminEnableUserView — POST /api/admin/users/<pk>/enable/
 # ---------------------------------------------------------------------------
 
-class AdminEnableUserViewTests(APITestCase):
+class AdminEnableUserViewTests(ArtlinksAPITestCase):
     """
     POST /api/admin/users/<pk>/enable/
 
@@ -2187,7 +2216,7 @@ class AdminEnableUserViewTests(APITestCase):
 # Password Reset Flow
 # ---------------------------------------------------------------------------
 
-class PasswordResetRequestTests(APITestCase):
+class PasswordResetRequestTests(ArtlinksAPITestCase):
     """
     POST /api/auth/password-reset/
     Sends a reset email when the address is registered; silently succeeds
@@ -2234,7 +2263,7 @@ class PasswordResetRequestTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
-class PasswordResetConfirmTests(APITestCase):
+class PasswordResetConfirmTests(ArtlinksAPITestCase):
     """
     POST /api/auth/password-reset/confirm/
     Sets a new password when uid + token are valid; rejects invalid/expired tokens.
@@ -2321,7 +2350,7 @@ class PasswordResetConfirmTests(APITestCase):
 # SocialLinkViewSet — CRUD /api/social-links/
 # ---------------------------------------------------------------------------
 
-class SocialLinkViewSetTests(APITestCase):
+class SocialLinkViewSetTests(ArtlinksAPITestCase):
     def setUp(self):
         self.user = AppUser.objects.create_user(
             username='creator', password='pass', role=AppUser.Role.CREATOR,
@@ -2409,7 +2438,7 @@ class SocialLinkViewSetTests(APITestCase):
 # Social URL validation — per-platform domain checks
 # ---------------------------------------------------------------------------
 
-class SocialURLValidationTests(APITestCase):
+class SocialURLValidationTests(ArtlinksAPITestCase):
     def setUp(self):
         self.user = AppUser.objects.create_user(
             username='creator', password='pass', role=AppUser.Role.CREATOR,
@@ -2506,7 +2535,7 @@ class SocialURLValidationTests(APITestCase):
 # Profile endpoint includes social_links
 # ---------------------------------------------------------------------------
 
-class ProfileSocialLinksTests(APITestCase):
+class ProfileSocialLinksTests(ArtlinksAPITestCase):
     def setUp(self):
         self.user = AppUser.objects.create_user(
             username='creator', password='pass', role=AppUser.Role.CREATOR,
@@ -2543,7 +2572,7 @@ class ProfileSocialLinksTests(APITestCase):
 # Reserved username validation
 # ---------------------------------------------------------------------------
 
-class ReservedUsernameTests(APITestCase):
+class ReservedUsernameTests(ArtlinksAPITestCase):
     def _register_url(self):
         return reverse('register')
 
@@ -2598,7 +2627,7 @@ class ReservedUsernameTests(APITestCase):
 # Pagination — GET /api/links/
 # ---------------------------------------------------------------------------
 
-class LinkListPaginationTests(APITestCase):
+class LinkListPaginationTests(ArtlinksAPITestCase):
     """
     Verify that GET /api/links/ returns a DRF pagination envelope and that
     results are split into pages of 10.
@@ -2648,7 +2677,7 @@ class LinkListPaginationTests(APITestCase):
 # Pagination — GET /api/collections/
 # ---------------------------------------------------------------------------
 
-class CollectionListPaginationTests(APITestCase):
+class CollectionListPaginationTests(ArtlinksAPITestCase):
     """
     Verify that GET /api/collections/ returns a DRF pagination envelope and
     that results are split into pages of 10.
@@ -2698,7 +2727,7 @@ class CollectionListPaginationTests(APITestCase):
 # Pagination — GET /api/users/links/
 # ---------------------------------------------------------------------------
 
-class UserLinksPaginationTests(APITestCase):
+class UserLinksPaginationTests(ArtlinksAPITestCase):
     """
     Verify that GET /api/users/links/ returns a DRF pagination envelope and
     that results are split into pages of 10.
@@ -2756,7 +2785,7 @@ class UserLinksPaginationTests(APITestCase):
 # Pagination — GET /api/users/featured_links/
 # ---------------------------------------------------------------------------
 
-class UserFeaturedLinksPaginationTests(APITestCase):
+class UserFeaturedLinksPaginationTests(ArtlinksAPITestCase):
     """
     Verify that GET /api/users/featured_links/ returns a DRF pagination
     envelope. In practice featured links are capped at 8 so a second page
@@ -2802,7 +2831,7 @@ class UserFeaturedLinksPaginationTests(APITestCase):
 # Pagination — GET /api/users/collections/summary/
 # ---------------------------------------------------------------------------
 
-class UserCollectionsSummaryPaginationTests(APITestCase):
+class UserCollectionsSummaryPaginationTests(ArtlinksAPITestCase):
     """
     Verify that GET /api/users/collections/summary/ returns a DRF pagination
     envelope and that results are split into pages of 10.
@@ -2852,7 +2881,7 @@ class UserCollectionsSummaryPaginationTests(APITestCase):
 # Pagination — GET /api/users/links/by_month/
 # ---------------------------------------------------------------------------
 
-class UserLinksByMonthPaginationTests(APITestCase):
+class UserLinksByMonthPaginationTests(ArtlinksAPITestCase):
     """
     Verify that GET /api/users/links/by_month/ returns a flat DRF pagination
     envelope (not a grouped dict) and splits correctly across pages of 10.
@@ -2923,3 +2952,288 @@ class UserLinksByMonthPaginationTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data['results']), 1)
         self.assertIsNone(response.data['next'])
+
+
+# ---------------------------------------------------------------------------
+# Throttle tests
+# ---------------------------------------------------------------------------
+
+class ThrottleTestCase(ArtlinksAPITestCase):
+    """
+    Base class for throttle tests.
+
+    Clears the throttle cache before and after every test so counters from
+    one test cannot bleed into the next.  Each subclass patches the target
+    throttle class's ``rate`` attribute to a small value (e.g. ``'3/min'``)
+    so the limit can be hit with a handful of requests rather than waiting
+    for the real hourly window.
+    """
+
+    def setUp(self):
+        super().setUp()
+        django_cache.clear()
+
+    def tearDown(self):
+        super().tearDown()
+        django_cache.clear()
+
+
+class LoginThrottleTests(ThrottleTestCase):
+    """
+    POST /api/auth/token/ is protected by LoginThrottle (IP-scoped,
+    anonymous).  The throttle fires before credential validation, so failed
+    login attempts count against the limit just as much as successful ones.
+    """
+
+    def setUp(self):
+        super().setUp()
+        AppUser.objects.create_user(
+            username='tuser', password='pass123', role=AppUser.Role.CREATOR,
+        )
+
+    def _url(self):
+        return reverse('token_obtain_pair')
+
+    def _post(self):
+        return self.client.post(self._url(), {'username': 'tuser', 'password': 'pass123'})
+
+    def test_requests_within_limit_are_not_throttled(self):
+        with patch.object(LoginThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                r = self._post()
+                self.assertNotEqual(r.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_request_over_limit_returns_429(self):
+        with patch.object(LoginThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self._post()
+            r = self._post()
+        self.assertEqual(r.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_429_response_contains_detail(self):
+        with patch.object(LoginThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self._post()
+            r = self._post()
+        self.assertIn('detail', r.data)
+
+    def test_429_response_contains_retry_after_header(self):
+        with patch.object(LoginThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self._post()
+            r = self._post()
+        self.assertIn('Retry-After', r)
+
+    def test_failed_attempts_consume_throttle_quota(self):
+        """Wrong-password requests count against the limit."""
+        with patch.object(LoginThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self.client.post(self._url(), {'username': 'tuser', 'password': 'wrong'})
+            r = self._post()
+        self.assertEqual(r.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+
+class RegisterThrottleTests(ThrottleTestCase):
+    """
+    POST /api/auth/register/ is protected by RegisterThrottle (IP-scoped,
+    anonymous).
+    """
+
+    def _url(self):
+        return reverse('register')
+
+    def _payload(self, n):
+        return {
+            'email': f'newuser{n}@example.com',
+            'username': f'newuser{n}',
+            'password': 'StrongPass1!',
+            'bio': '',
+        }
+
+    def test_requests_within_limit_are_not_throttled(self):
+        with patch.object(RegisterThrottle, 'rate', '3/min', create=True):
+            for i in range(3):
+                r = self.client.post(self._url(), self._payload(i))
+                self.assertNotEqual(r.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_request_over_limit_returns_429(self):
+        with patch.object(RegisterThrottle, 'rate', '3/min', create=True):
+            for i in range(3):
+                self.client.post(self._url(), self._payload(i))
+            r = self.client.post(self._url(), self._payload(99))
+        self.assertEqual(r.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_429_response_contains_detail(self):
+        with patch.object(RegisterThrottle, 'rate', '3/min', create=True):
+            for i in range(3):
+                self.client.post(self._url(), self._payload(i))
+            r = self.client.post(self._url(), self._payload(99))
+        self.assertIn('detail', r.data)
+
+    def test_429_response_contains_retry_after_header(self):
+        with patch.object(RegisterThrottle, 'rate', '3/min', create=True):
+            for i in range(3):
+                self.client.post(self._url(), self._payload(i))
+            r = self.client.post(self._url(), self._payload(99))
+        self.assertIn('Retry-After', r)
+
+
+class PasswordResetThrottleTests(ThrottleTestCase):
+    """
+    POST /api/auth/password-reset/ is protected by PasswordResetThrottle
+    (IP-scoped, anonymous) to prevent email flooding.
+    """
+
+    def setUp(self):
+        super().setUp()
+        AppUser.objects.create_user(
+            username='tuser', password='pass123',
+            email='tuser@example.com', role=AppUser.Role.CREATOR,
+        )
+
+    def _url(self):
+        return reverse('password_reset')
+
+    def _post(self):
+        return self.client.post(self._url(), {'email': 'tuser@example.com'})
+
+    def test_requests_within_limit_are_not_throttled(self):
+        with patch.object(PasswordResetThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                r = self._post()
+                self.assertNotEqual(r.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_request_over_limit_returns_429(self):
+        with patch.object(PasswordResetThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self._post()
+            r = self._post()
+        self.assertEqual(r.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_429_response_contains_detail(self):
+        with patch.object(PasswordResetThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self._post()
+            r = self._post()
+        self.assertIn('detail', r.data)
+
+    def test_429_response_contains_retry_after_header(self):
+        with patch.object(PasswordResetThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self._post()
+            r = self._post()
+        self.assertIn('Retry-After', r)
+
+    def test_unknown_email_requests_consume_throttle_quota(self):
+        """Requests for non-existent emails still count against the limit."""
+        with patch.object(PasswordResetThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self.client.post(self._url(), {'email': 'ghost@example.com'})
+            r = self._post()
+        self.assertEqual(r.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+
+class UsernameCheckThrottleTests(ThrottleTestCase):
+    """
+    GET /api/auth/username/check/ is protected by UsernameCheckThrottle
+    (IP-scoped, anonymous) to prevent username enumeration at scale.
+    """
+
+    def _url(self, username='testuser'):
+        return reverse('username_check') + f'?username={username}'
+
+    def test_requests_within_limit_are_not_throttled(self):
+        with patch.object(UsernameCheckThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                r = self.client.get(self._url())
+                self.assertNotEqual(r.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_request_over_limit_returns_429(self):
+        with patch.object(UsernameCheckThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self.client.get(self._url())
+            r = self.client.get(self._url())
+        self.assertEqual(r.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_429_response_contains_detail(self):
+        with patch.object(UsernameCheckThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self.client.get(self._url())
+            r = self.client.get(self._url())
+        self.assertIn('detail', r.data)
+
+    def test_429_response_contains_retry_after_header(self):
+        with patch.object(UsernameCheckThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self.client.get(self._url())
+            r = self.client.get(self._url())
+        self.assertIn('Retry-After', r)
+
+
+class AvatarUploadThrottleTests(ThrottleTestCase):
+    """
+    POST /api/users/{id}/avatar is protected by AvatarUploadThrottle
+    (user-scoped), so each authenticated user has an independent counter.
+
+    Requests are sent without an image file so the view returns 400, but the
+    throttle check runs before view logic and still consumes a quota slot.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.user = AppUser.objects.create_user(
+            username='creator', password='pass123', role=AppUser.Role.CREATOR,
+        )
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer {get_access_token(self.user)}'
+        )
+
+    def _url(self, user=None):
+        pk = (user or self.user).pk
+        return reverse('appuser-avatar', args=[pk])
+
+    def _post(self, user=None):
+        return self.client.post(self._url(user), {}, format='multipart')
+
+    def test_requests_within_limit_are_not_throttled(self):
+        with patch.object(AvatarUploadThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                r = self._post()
+                self.assertNotEqual(r.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_request_over_limit_returns_429(self):
+        with patch.object(AvatarUploadThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self._post()
+            r = self._post()
+        self.assertEqual(r.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_429_response_contains_detail(self):
+        with patch.object(AvatarUploadThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self._post()
+            r = self._post()
+        self.assertIn('detail', r.data)
+
+    def test_429_response_contains_retry_after_header(self):
+        with patch.object(AvatarUploadThrottle, 'rate', '3/min', create=True):
+            for _ in range(3):
+                self._post()
+            r = self._post()
+        self.assertIn('Retry-After', r)
+
+    def test_throttle_counters_are_independent_per_user(self):
+        """Exhausting one user's quota does not affect another user's quota."""
+        other = AppUser.objects.create_user(
+            username='other', password='pass123', role=AppUser.Role.CREATOR,
+        )
+        with patch.object(AvatarUploadThrottle, 'rate', '3/min', create=True):
+            # Exhaust self.user's quota
+            for _ in range(3):
+                self._post()
+            # Switch to the other user and confirm they are not throttled
+            self.client.credentials(
+                HTTP_AUTHORIZATION=f'Bearer {get_access_token(other)}'
+            )
+            r = self.client.post(self._url(other), {}, format='multipart')
+        self.assertNotEqual(r.status_code, status.HTTP_429_TOO_MANY_REQUESTS)

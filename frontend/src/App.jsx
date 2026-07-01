@@ -1,6 +1,8 @@
+import { useState, useEffect, useCallback } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import PrivateRoute from './components/PrivateRoute';
 import AdminRoute from './components/AdminRoute';
+import RateLimitBanner from './components/RateLimitBanner';
 import LandingPage from './pages/LandingPage';
 import DashboardPage from './pages/DashboardPage';
 import CollectionsPage from './pages/CollectionsPage';
@@ -14,8 +16,22 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 
 export default function App() {
+  const [rateLimit, setRateLimit] = useState(null);
+
+  useEffect(() => {
+    const handler = (e) => setRateLimit({ retryAfter: e.detail?.retryAfter ?? null });
+    window.addEventListener('artlinks:ratelimit', handler);
+    return () => window.removeEventListener('artlinks:ratelimit', handler);
+  }, []);
+
+  const dismissRateLimit = useCallback(() => setRateLimit(null), []);
+
   return (
-    <Routes>
+    <>
+      {rateLimit && (
+        <RateLimitBanner retryAfter={rateLimit.retryAfter} onDismiss={dismissRateLimit} />
+      )}
+      <Routes>
       {/* Landing — redirects to /dashboard if already logged in */}
       <Route path="/" element={<LandingPage />} />
 
@@ -41,5 +57,6 @@ export default function App() {
       {/* Public profile — no auth required; must come after named routes */}
       <Route path="/:username" element={<PublicProfilePage />} />
     </Routes>
+    </>
   );
 }
