@@ -76,3 +76,4 @@ celerybeat.pid
 
 #local only
 deploy.md
+artlinks-architecture.html
