@@ -54,6 +54,9 @@ coverage.xml
 # */migrations/*.py
 # !*/migrations/__init__.py
 
+# Claude Code
+.claude/
+
 # IDE
 .idea/
 .vscode/
@@ -70,3 +73,6 @@ desktop.ini
 # Celery
 celerybeat-schedule
 celerybeat.pid
+
+#local only
+deploy.md
